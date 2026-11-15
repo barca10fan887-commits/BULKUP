@@ -133,3 +133,7 @@ The iOS app wraps the same build with Capacitor. The UI talks to storage only th
 ## Disclaimer
 
 BULKUP gives general fitness and nutrition guidance. Calorie, macro and weight-gain figures are estimates from standard formulas, not medical advice.
+
+## Credits
+
+Food and fitness illustrations: [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT licence), bundled in `public/art`.

@@ -18,7 +18,7 @@ describe("basic coach", () => {
     const date = "2026-11-15";
     data.foodEntries = [{ ...rec(), date, meal: "breakfast", name: "Oats", servingLabel: "1", quantity: 1, calories: 800, protein: 30, carbs: 100, fat: 20, source: "manual" }];
     const reply = basicCoachReply("How many calories do I have left?", data, profileFixture(), date);
-    expect(reply).toContain("2200 kcal left");
+    expect(reply).toContain("2,200 kcal left");
   });
 
   it("says it needs data rather than inventing a trend", () => {

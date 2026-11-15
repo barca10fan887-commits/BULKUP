@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Bot, Info, Send, Square, Trash2, User } from "lucide-react";
 import type { ChatMessage, StatusResponse } from "@shared/api";
 import { useProfile, useStore } from "@/data/store";
@@ -63,6 +64,17 @@ export default function CoachPage() {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, streaming]);
 
+  // Opened from Home's "Up next" card: ask that question straight away.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const pendingAsk = (location.state as { ask?: string } | null)?.ask;
+  useEffect(() => {
+    if (!pendingAsk || status === null) return;
+    navigate(location.pathname, { replace: true, state: null });
+    ask(pendingAsk);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAsk, status]);
+
   async function ask(question: string, retry = false) {
     const q = question.trim();
     if (!q || streaming !== null) return;
@@ -118,8 +130,8 @@ export default function CoachPage() {
   return (
     <div className="flex min-h-[calc(100dvh-180px)] flex-col">
       <PageHeader
-        title="AI Coach"
-        subtitle={mode === "ai" ? "Ask me anything" : "Simple answers from your logged data"}
+        title="Coach"
+        subtitle={mode === "ai" ? "Ask me anything" : "Meal plans, recipes, training and more"}
         action={
           messages.length > 0 &&
           (confirmClear ? (

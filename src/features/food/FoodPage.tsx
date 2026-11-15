@@ -14,6 +14,8 @@ import { Input, Select, num } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { AddFoodSheet, type AddMode } from "./AddFoodSheet";
 import { ManualFoodForm } from "./ManualFoodForm";
+import { Art } from "@/components/Art";
+import { foodArt } from "@/lib/art";
 import { MEALS, MEAL_LABEL, defaultMeal, fmt1 } from "./shared";
 
 export default function FoodPage() {
@@ -185,7 +187,8 @@ function Diary({ date, setDate, onAdd }: { date: string; setDate(d: string): voi
                 {items.map((e) => (
                   <li key={e.id} className="group flex items-center gap-2 px-4 sm:px-5">
                     <button className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3 text-left" onClick={() => setEditing(e)}>
-                      <div className="min-w-0">
+                      <Art name={foodArt(e.name)} size={40} />
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{e.name}</p>
                         <p className="truncate text-xs text-mist-500">
                           {e.servingLabel}
@@ -386,6 +389,7 @@ function SavedMeals() {
     <ul className="flex flex-col gap-2">
       {data.favouriteMeals.map((f) => (
         <li key={f.id} className="flex items-center gap-3 rounded-2xl border border-ink-700 bg-ink-850 px-4 py-3">
+          <Art name={foodArt(f.items[0]?.name ?? f.name)} size={40} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{f.name}</p>
             <p className="truncate text-xs text-mist-400">{f.items.map((i) => i.name).join(", ")}</p>

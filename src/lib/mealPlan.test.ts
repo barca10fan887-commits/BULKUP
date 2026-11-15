@@ -58,7 +58,7 @@ describe("coach meal questions", () => {
     const first = ask("What should I have for breakfast tomorrow?");
     const second = ask("another one", ["What should I have for breakfast tomorrow?"]);
     expect(second).toContain("Breakfast for tomorrow");
-    expect(second.split("\n")[0]).not.toBe(first.split("\n")[0]);
+    expect(second.split("\n")[1]).not.toBe(first.split("\n")[1]);
   });
   it("builds a week plan with 7 days", () => {
     const reply = ask("Make me a meal plan for this week");

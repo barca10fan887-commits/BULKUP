@@ -12,6 +12,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/components/ui/cn";
 import { RoutineEditor } from "./RoutineEditor";
 import { PlanBuilder } from "./PlanBuilder";
+import { Art } from "@/components/Art";
 import { ActiveWorkout } from "./ActiveWorkout";
 import { uid } from "@/lib/id";
 
@@ -117,7 +118,8 @@ function Plan({ onStart, onEdit, onBuild, onAdd }: { onStart(r: Routine | null):
             return (
               <Card key={r.id} className={cn(isToday && "border-volt-500/40")}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                  <Art name={/lower|legs/i.test(r.name) ? "lifter" : /recovery/i.test(r.name) ? "water" : "muscle"} size={44} className="mr-1" />
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="truncate font-display text-lg font-semibold">{r.name}</h3>
                       {isToday && <Pill tone="volt">Today</Pill>}

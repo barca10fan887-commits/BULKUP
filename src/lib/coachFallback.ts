@@ -7,6 +7,7 @@ import { nextWorkoutPlan } from "./coachContext";
 import { BUILTIN_FOODS } from "./foodDb";
 import { round } from "./format";
 import { simpleGoal } from "./calc";
+import { foodArt } from "./art";
 import { FORM_TIPS, RECIPES, SUPPLEMENT_INFO, type Recipe } from "./coachKnowledge";
 import { dayPlan, formatDayPlan, formatRecipeFor, formatWeekPlan, mentionedMeal, mentionsWeek, parseDay, recipeForDay, weekPlan } from "./mealPlan";
 
@@ -104,7 +105,7 @@ function mealOfDay(hour: number): Recipe["meal"] {
 }
 
 function formatRecipe(r: Recipe): string {
-  return `**${r.name}** (about ${r.kcal} kcal, ${r.protein} g protein)\n${r.ingredients.map((i) => `- ${i}`).join("\n")}\n\n${r.steps}`;
+  return `{hero:${foodArt(r.name)}}\n**${r.name}** (about ${r.kcal} kcal, ${r.protein} g protein)\n${r.ingredients.map((i) => `- ${i}`).join("\n")}\n\n${r.steps}`;
 }
 
 const vegetarianSafe = (name: string) => !/(chicken|beef|salmon|tuna|pork|turkey|burger|pie|bolognese|burrito|sushi)/i.test(name);
@@ -146,14 +147,14 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
   switch (intent) {
     case "calories":
       return calLeft > 0
-        ? `You've logged ${Math.round(totals.calories)} of ${t.calories} kcal today, so you have **${calLeft} kcal left**.`
+        ? `You've logged ${Math.round(totals.calories)} of ${t.calories} kcal today, so you have **${calLeft.toLocaleString()} kcal left**.`
         : `You've logged ${Math.round(totals.calories)} kcal today, which is ${Math.abs(calLeft)} kcal over your ${t.calories} kcal target.`;
     case "protein":
       if (proLeft <= 0) return `You've hit your protein target: ${Math.round(totals.protein)} g of ${t.protein} g.`;
       return `You need **${proLeft} g more protein** today (${Math.round(totals.protein)} of ${t.protein} g). Options from the food list:\n${suggestFoods(profile, proLeft * 6, proLeft).map((f) => `- ${f.name} (${f.servingSize} ${f.servingUnit}): ${f.protein} g protein`).join("\n")}`;
     case "eat":
       if (calLeft <= 0 && proLeft <= 0) return t.weeklyGainKg < 0 ? "You've reached your calorie and protein targets for today. If you're hungry, pick something low in calories like vegetables or a salad." : "You've hit both your calorie and protein targets today. Nothing more is needed; eat to appetite.";
-      return `You still need about **${Math.max(calLeft, 0)} kcal** and **${Math.max(proLeft, 0)} g protein** today. Some foods that fit:\n${foodsLine(calLeft, proLeft)}`;
+      return `You still need about **${Math.max(calLeft, 0).toLocaleString()} kcal** and **${Math.max(proLeft, 0)} g protein** today. Some foods that fit:\n${foodsLine(calLeft, proLeft)}`;
     case "rate":
     case "plateau": {
       if (trend == null) return "I need at least two weigh-ins about a week apart to judge your progress. Log your weight on the Progress page a few mornings a week.";
@@ -210,7 +211,7 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
       const meal = mentionedMeal(base) ?? mealOfDay(hour);
       const day = parseDay(base, date) ?? { date, label: meal === "dinner" && hour >= 12 ? "tonight" : "today" };
       const r = recipeForDay(profile, meal, day.date, shift);
-      const fit = day.date === date && calLeft > 0 ? `\n\nYou have ${calLeft} kcal and ${Math.max(proLeft, 0)} g protein left today.` : "";
+      const fit = day.date === date && calLeft > 0 ? `\n\nYou have ${calLeft.toLocaleString()} kcal and ${Math.max(proLeft, 0)} g protein left today.` : "";
       return formatRecipeFor(profile, meal, r, day.label) + fit;
     }
     case "mealPlan": {
@@ -239,11 +240,11 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
     case "cheat":
       return "One big day won't undo your progress. A single day of overeating mostly shows up as water weight for a few days.\n\nJust go back to normal at your next meal: don't skip meals or starve yourself to make up for it. Log it honestly so your averages stay real, and move on.";
     case "appetite":
-      return `Struggling to eat enough is really common on a bulk. Try:\n- Drink some calories: the mass-gain smoothie (milk, oats, banana, peanut butter, protein) is about 750 kcal.\n- Add calorie-dense extras: olive oil on rice, peanut butter, cheese, nuts, dried fruit.\n- Eat more often: 4-5 smaller meals instead of 3 big ones.\n- Don't fill up on water or salad right before meals.\n\nYou still need about ${Math.max(calLeft, 0)} kcal today.`;
+      return `Struggling to eat enough is really common on a bulk. Try:\n- Drink some calories: the mass-gain smoothie (milk, oats, banana, peanut butter, protein) is about 750 kcal.\n- Add calorie-dense extras: olive oil on rice, peanut butter, cheese, nuts, dried fruit.\n- Eat more often: 4-5 smaller meals instead of 3 big ones.\n- Don't fill up on water or salad right before meals.\n\nYou still need about ${Math.max(calLeft, 0).toLocaleString()} kcal today.`;
     case "hunger":
       return goal === "cut"
         ? "Feeling hungry on a cut is normal. To stay fuller:\n- Get protein in every meal (you're aiming for " + t.protein + " g a day).\n- Fill half your plate with vegetables.\n- Choose high-volume foods: potatoes, oats, berries, soups, popcorn.\n- Drink water and get enough sleep. Poor sleep makes you hungrier.\n- Diet drinks and sugar-free gum can help with cravings."
-        : `If you're hungry, eat! You have ${Math.max(calLeft, 0)} kcal left today. Protein-rich options keep you full longest.`;
+        : `If you're hungry, eat! You have ${Math.max(calLeft, 0).toLocaleString()} kcal left today. Protein-rich options keep you full longest.`;
     case "sleep":
       return "Sleep is when you recover and build muscle. Aim for 7-9 hours.\n- Keep a regular bedtime and wake time, even on weekends.\n- No caffeine (including pre-workout) within 6-8 hours of bed.\n- Dark, cool room; put your phone away 30 minutes before bed.\n- A big late meal can disrupt sleep for some people. A small protein snack is fine.";
     case "recovery":
@@ -283,7 +284,7 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
     case "pain":
       return "I'm not able to diagnose pain or injuries. If something hurts sharply, is swollen, or doesn't improve in a few days, please see a doctor or physio.\n\nIn the meantime, avoid movements that cause pain, keep training the parts that feel fine, and don't push through sharp pain.";
     case "greeting":
-      return `Hey ${profile.name}! You've got ${Math.max(calLeft, 0)} kcal and ${Math.max(proLeft, 0)} g protein left today. Ask me about meals, recipes, your workouts, progress, sleep or anything else fitness-related.`;
+      return `Hey ${profile.name}! You've got ${Math.max(calLeft, 0).toLocaleString()} kcal and ${Math.max(proLeft, 0)} g protein left today. Ask me about meals, recipes, your workouts, progress, sleep or anything else fitness-related.`;
     case "thanks":
       return pick(["Anytime! Keep it up.", "No worries. You've got this.", "Happy to help. Stay consistent!"], seed);
     default:

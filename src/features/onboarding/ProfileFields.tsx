@@ -7,6 +7,8 @@ import { cn } from "@/components/ui/cn";
 import { DIET_OPTIONS } from "@/lib/templates";
 import { simpleGoal, type SimpleGoal } from "@/lib/calc";
 import type { Equipment } from "@/lib/workoutPlan";
+import { Art } from "@/components/Art";
+import type { ArtName } from "@/lib/art";
 
 export interface ProfileDraft {
   name: string;
@@ -53,10 +55,10 @@ export function effectiveTarget(d: ProfileDraft): number | undefined {
   return simpleGoal(d.goal) === "maintain" ? d.startWeightKg : d.targetWeightKg;
 }
 
-const GOALS: { value: SimpleGoal; label: string; description: string }[] = [
-  { value: "cut", label: "Cut", description: "Lose fat, keep muscle" },
-  { value: "maintain", label: "Maintain", description: "Stay the same weight" },
-  { value: "bulk", label: "Bulk", description: "Build muscle and size" },
+const GOALS: { value: SimpleGoal; label: string; description: string; art: ArtName }[] = [
+  { value: "cut", label: "Cut", description: "Lose fat, keep muscle", art: "fire" },
+  { value: "maintain", label: "Maintain", description: "Stay the same weight", art: "scale" },
+  { value: "bulk", label: "Bulk", description: "Build muscle and size", art: "muscle" },
 ];
 
 export function GoalFields({ d, set, errors }: { d: ProfileDraft; set: SetDraft; errors: Errors }) {
@@ -77,7 +79,8 @@ export function GoalFields({ d, set, errors }: { d: ProfileDraft; set: SetDraft;
                 onClick={() => set({ goal: g.value })}
                 className={cn("flex items-center justify-between rounded-2xl border px-4 py-4 text-left transition", active ? "border-volt-500 bg-volt-500/10 shadow-glow" : "border-ink-600 bg-ink-900 hover:border-ink-500")}
               >
-                <span>
+                <Art name={g.art} size={52} className="mr-4" />
+                <span className="flex-1">
                   <span className="block font-display text-lg font-semibold">{g.label}</span>
                   <span className="block text-sm text-mist-400">{g.description}</span>
                 </span>

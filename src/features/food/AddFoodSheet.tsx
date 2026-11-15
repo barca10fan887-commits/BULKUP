@@ -17,6 +17,8 @@ import { ManualFoodForm, type ManualFoodValues } from "./ManualFoodForm";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { PhotoScanner } from "./PhotoScanner";
 import { MEAL_LABEL } from "./shared";
+import { Art } from "@/components/Art";
+import { foodArt } from "@/lib/art";
 
 export type AddMode = "search" | "barcode" | "photo" | "manual" | "favourites";
 
@@ -261,7 +263,8 @@ function FoodList({ title, icon, items, onPick }: { title?: string; icon?: React
         {items.map((f) => (
           <li key={f.key}>
             <button onClick={() => onPick(f)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-ink-800">
-              <div className="min-w-0">
+              <Art name={foodArt(f.name)} size={40} />
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-mist-100">{f.name}</p>
                 <p className="truncate text-xs text-mist-500">
                   {f.brand ? `${f.brand} · ` : ""}

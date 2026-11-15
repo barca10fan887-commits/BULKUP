@@ -5,6 +5,7 @@ import type { ISODate, Profile } from "./types";
 import { RECIPES, type Recipe } from "./coachKnowledge";
 import { addDays, formatDay, parseISODate, today as todayISO, weekday } from "./dates";
 import { simpleGoal } from "./calc";
+import { foodArt } from "./art";
 
 export type Meal = Recipe["meal"];
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -117,7 +118,7 @@ const portionText = (p: number) => (p === 1 ? "" : ` (${p}x portion)`);
 
 export function formatDayPlan(plan: DayPlan, profile: Profile, label: string): string {
   const t = profile.targets;
-  const lines = plan.meals.map((m) => `- **${LABEL[m.meal]}:** ${m.recipe.name}${portionText(m.portion)}, about ${m.kcal} kcal, ${m.protein} g protein`);
+  const lines = plan.meals.map((m) => `- {art:${foodArt(m.recipe.name)}}**${LABEL[m.meal]}:** ${m.recipe.name}${portionText(m.portion)}, about ${m.kcal} kcal, ${m.protein} g protein`);
   const proteinGap = t.protein - plan.protein;
   const extra = proteinGap > 15 ? `\n\nThat's ${proteinGap} g short on protein. Add a protein shake or yoghurt to close the gap.` : "";
   return `**Meal plan for ${label}** (target ${t.calories.toLocaleString()} kcal, ${t.protein} g protein)\n${lines.join("\n")}\n\n**Total:** about ${plan.kcal.toLocaleString()} kcal and ${plan.protein} g protein.${extra}\n\nAsk "${plan.meals[0].meal} recipe for ${label}" to see ingredients and steps.`;
@@ -125,7 +126,7 @@ export function formatDayPlan(plan: DayPlan, profile: Profile, label: string): s
 
 export function formatWeekPlan(plans: DayPlan[], profile: Profile): string {
   const lines = plans.map((p) => {
-    const main = p.meals.filter((m) => m.meal !== "snack").map((m) => m.recipe.name).join(" · ");
+    const main = p.meals.filter((m) => m.meal !== "snack").map((m) => `{art:${foodArt(m.recipe.name)}}${m.recipe.name}`).join(" · ");
     const snacks = p.meals.filter((m) => m.meal === "snack").length;
     return `**${formatDay(p.date, { weekday: "short", day: "numeric", month: "short" })}:** ${main}${snacks ? ` + ${snacks} snack${snacks > 1 ? "s" : ""}` : ""} (about ${p.kcal.toLocaleString()} kcal, ${p.protein} g protein)`;
   });
@@ -136,5 +137,5 @@ export function formatRecipeFor(profile: Profile, meal: Meal, recipe: Recipe, la
   const share = meal === "snack" ? 0.12 : SHARE[meal];
   const portion = Math.min(1.75, Math.max(0.75, roundPortion((profile.targets.calories * share) / recipe.kcal)));
   const sized = portion === 1 ? "" : `\n\nFor your targets, have about **${portion}x** this amount (${Math.round(recipe.kcal * portion)} kcal, ${Math.round(recipe.protein * portion)} g protein).`;
-  return `**${LABEL[meal]} for ${label}: ${recipe.name}** (about ${recipe.kcal} kcal, ${recipe.protein} g protein)\n${recipe.ingredients.map((i) => `- ${i}`).join("\n")}\n\n${recipe.steps}${sized}\n\nSay "another one" for a different idea.`;
+  return `{hero:${foodArt(recipe.name)}}\n**${LABEL[meal]} for ${label}: ${recipe.name}** (about ${recipe.kcal} kcal, ${recipe.protein} g protein)\n${recipe.ingredients.map((i) => `- ${i}`).join("\n")}\n\n${recipe.steps}${sized}\n\nSay "another one" for a different idea.`;
 }
