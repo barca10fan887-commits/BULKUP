@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { basicCheckInReview, basicCoachReply, detectIntent, suggestFoods } from "./coachFallback";
+import { RECIPES } from "./coachKnowledge";
 import { emptyData, profileFixture, rec } from "./testData";
 
 describe("basic coach", () => {
@@ -73,7 +74,8 @@ describe("built-in coach topics", () => {
 
   it("only suggests vegan recipes to vegans", () => {
     const reply = ask("Give me a dinner recipe", profileFixture({ dietaryPreferences: ["Vegan"] }));
-    expect(reply).toMatch(/Lentil and chickpea curry/);
+    const named = RECIPES.find((r) => reply.includes(r.name));
+    expect(named?.vegan).toBe(true);
   });
 
   it("refers pain to a professional", () => {

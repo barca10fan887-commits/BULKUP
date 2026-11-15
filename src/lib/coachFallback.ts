@@ -8,6 +8,7 @@ import { BUILTIN_FOODS } from "./foodDb";
 import { round } from "./format";
 import { simpleGoal } from "./calc";
 import { FORM_TIPS, RECIPES, SUPPLEMENT_INFO, type Recipe } from "./coachKnowledge";
+import { dayPlan, formatDayPlan, formatRecipeFor, formatWeekPlan, mentionedMeal, mentionsWeek, parseDay, recipeForDay, weekPlan } from "./mealPlan";
 
 export type Pace = "on_track" | "too_slow" | "too_fast" | "wrong_way";
 
@@ -39,13 +40,15 @@ type Intent =
   | "calories" | "protein" | "eat" | "rate" | "workout" | "plateau" | "week" | "routine"
   | "recipe" | "snack" | "sleep" | "recovery" | "motivation" | "cardio" | "supplement" | "water" | "alcohol"
   | "eatingOut" | "cheat" | "budget" | "mealPrep" | "form" | "warmup" | "missed" | "pain" | "appetite" | "hunger"
-  | "fluctuation" | "targets" | "fatLoss" | "greeting" | "thanks" | "unknown";
+  | "fluctuation" | "targets" | "fatLoss" | "greeting" | "thanks" | "mealPlan" | "unknown";
 
 // Checked in order: more specific topics first.
 const RULES: [Intent, RegExp][] = [
   ["pain", /\b(pain|hurts?|injur|sprain|strain|pulled|tweak|sharp|doctor|physio)/],
   ["thanks", /^(thanks|thank you|thx|cheers|ty)\b/],
   ["greeting", /^(hi|hey|hello|yo|sup|g'?day|good (morning|afternoon|evening))\b[!. ]*$/],
+  ["mealPlan", /(meal ?plan|diet plan|food plan|eating plan|plan (my|out my|out) (meals|food|day|week|eating)|what (should|do|can) i eat (tomorrow|this week|next week|today|on \w+day|for the week)|meals? for (the|this|next) week)/],
+  ["recipe", /(breakfast|brekky|brekkie|lunch|dinner|snack)\b.*\b(tomorrow|tmrw|tonight|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b|what (should|can|do) i (have|eat|make|cook) for (breakfast|brekky|lunch|dinner|tea)|for (breakfast|brekky|lunch|dinner) (tomorrow|tonight|today)|(tomorrow|tonight)'?s? (breakfast|lunch|dinner)/],
   ["supplement", /(creatine|protein powder|whey|mass gainer|gainer|pre[- ]?workout|fish oil|omega|vitamin d|bcaa|supplement)/],
   ["form", /(form|technique|how (do|to) (i )?(do|perform)|cues?)\b.*|(bench|squat|deadlift|shoulder press|overhead press|ohp|row|pull[- ]?up|push[- ]?up).*(form|technique|properly|right|correct)/],
   ["warmup", /(warm[- ]?up|warming up|before (i )?lift)/],
@@ -129,9 +132,8 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
   // "another one" / "more" continues the previous topic.
   const followUp = /^(another|more|again|next|something else|another one|other)\b/i.test(question.trim());
   if (followUp && history.length) {
-    const prev = [...history].reverse().map(detectIntent).find((i) => i !== "unknown" && i !== "recipe");
-    if (prev === "snack") intent = "snack";
-    else intent = "recipe";
+    const prev = [...history].reverse().map(detectIntent).find((i) => i !== "unknown");
+    intent = prev === "snack" ? "snack" : "recipe";
   }
   const seed = history.length + question.length;
   const weight = currentWeight(data.bodyEntries, profile);
@@ -190,16 +192,31 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
       return tips.join("\n\n");
     }
     case "recipe": {
-      const meals = ["breakfast", "lunch", "dinner", "snack"] as const;
-      const findMeal = (text: string) => meals.find((m) => text.toLowerCase().includes(m));
-      // A follow-up keeps the meal from the last recipe request.
-      const mealWord = findMeal(question) ?? (followUp ? [...history].reverse().map(findMeal).find(Boolean) : undefined);
-      const list = recipesFor(profile, mealWord ?? mealOfDay(hour));
-      const pool = list.length ? list : recipesFor(profile);
-      const asked = history.filter((h) => ["recipe"].includes(detectIntent(h)) || /^(another|more|something else)/i.test(h)).length;
-      const r = pool[asked % pool.length];
-      const fit = calLeft > 0 ? `\n\nYou have ${calLeft} kcal and ${Math.max(proLeft, 0)} g protein left today, so this ${r.kcal <= calLeft ? "fits" : "would take you a bit over. Use a smaller portion"}.` : "";
-      return `Try this:\n\n${formatRecipe(r)}${fit}\n\nSay "another one" for a different idea.`;
+      // A follow-up ("another one") keeps the meal and day from the last real request
+      // and moves one recipe along; otherwise each day has its own recipe.
+      const isFollow = (h: string) => /^(another|more|again|next|something else|other)\b/i.test(h.trim());
+      let base = question;
+      let shift = 0;
+      if (followUp) {
+        shift = 1;
+        for (let i = history.length - 1; i >= 0; i--) {
+          if (isFollow(history[i])) shift++;
+          else {
+            base = history[i];
+            break;
+          }
+        }
+      }
+      const meal = mentionedMeal(base) ?? mealOfDay(hour);
+      const day = parseDay(base, date) ?? { date, label: meal === "dinner" && hour >= 12 ? "tonight" : "today" };
+      const r = recipeForDay(profile, meal, day.date, shift);
+      const fit = day.date === date && calLeft > 0 ? `\n\nYou have ${calLeft} kcal and ${Math.max(proLeft, 0)} g protein left today.` : "";
+      return formatRecipeFor(profile, meal, r, day.label) + fit;
+    }
+    case "mealPlan": {
+      if (mentionsWeek(question)) return formatWeekPlan(weekPlan(profile, /next week/i.test(question) ? addDays(date, 7 - ((new Date(date + "T00:00:00").getDay() + 6) % 7)) : date), profile);
+      const day = parseDay(question, date) ?? (hour < 10 ? { date, label: "today" } : { date: addDays(date, 1), label: "tomorrow" });
+      return formatDayPlan(dayPlan(profile, day.date), profile, day.label);
     }
     case "snack": {
       const pool = recipesFor(profile, "snack");
@@ -270,7 +287,8 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
     case "thanks":
       return pick(["Anytime! Keep it up.", "No worries. You've got this.", "Happy to help. Stay consistent!"], seed);
     default:
-      return `Here's where you stand today: ${Math.round(totals.calories)}/${t.calories} kcal, ${Math.round(totals.protein)}/${t.protein} g protein, current weight ${weight} kg (target ${profile.targetWeightKg} kg).\n\nI can help with things like:\n- "Give me a dinner recipe" or "high-protein snack"\n- "Am I on track?" or "Why has my weight stopped changing?"\n- "What should my next workout be?" or "Squat form tips"\n- "Is creatine worth it?", "How do I sleep better?", "Eating out tips"`;
+      return `Here's where you stand today: ${Math.round(totals.calories)}/${t.calories} kcal, ${Math.round(totals.protein)}/${t.protein} g protein, current weight ${weight} kg (target ${profile.targetWeightKg} kg).\n\nI can help with things like:\n- "What should I have for breakfast tomorrow?" or "Make me a meal plan for the week"
+- "Give me a dinner recipe" or "high-protein snack"\n- "Am I on track?" or "Why has my weight stopped changing?"\n- "What should my next workout be?" or "Squat form tips"\n- "Is creatine worth it?", "How do I sleep better?", "Eating out tips"`;
   }
 }
 

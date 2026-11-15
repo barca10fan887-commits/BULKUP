@@ -13,6 +13,8 @@ import { cn } from "@/components/ui/cn";
 import { AiConsent } from "@/components/AiConsent";
 
 const SUGGESTIONS = [
+  "What should I have for breakfast tomorrow?",
+  "Make me a meal plan for this week",
   "What should I eat today?",
   "Give me a high-protein dinner recipe",
   "Am I on track for my goal?",
@@ -23,6 +25,9 @@ const SUGGESTIONS = [
 ];
 
 const BASIC_SUGGESTIONS = [
+  "What should I have for breakfast tomorrow?",
+  "Make me a meal plan for this week",
+  "Meal plan for tomorrow",
   "How many calories do I have left?",
   "Give me a dinner recipe",
   "High-protein snack",
