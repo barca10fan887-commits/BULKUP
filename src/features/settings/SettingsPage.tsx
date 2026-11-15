@@ -349,7 +349,9 @@ function PrivacySection() {
       <div className="flex flex-col divide-y divide-ink-700/70">
         <Toggle
           label="AI features"
-          description="Lets the AI coach and photo scanner send your profile, logged food, workouts, weight and photos you scan to the AI service to generate answers. Data is sent only when you use these features and isn't used to train models."
+          description={status?.provider === "gemini"
+            ? "Lets the AI coach and photo scanner send your questions, logged data and scanned photos to Google's Gemini AI when you use them. On Google's free tier, Google may use this to improve its products."
+            : "Lets the AI coach and photo scanner send your profile, logged food, workouts, weight and photos you scan to the AI service when you use them. It isn't used to train models."}
           checked={p.aiDataSharing}
           onChange={(v) => saveProfile({ ...profile, privacy: { ...p, aiDataSharing: v } })}
         />

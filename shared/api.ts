@@ -73,6 +73,8 @@ export type CoachRequest = z.infer<typeof CoachRequestSchema>;
 
 export interface StatusResponse {
   ai: boolean;
+  /** Which AI service answers: Google Gemini (free tier) or Claude. */
+  provider?: "gemini" | "claude" | null;
   model: string | null;
   auth: "supabase" | "access_code" | "dev_open" | "locked";
   accountDeletion: boolean;

@@ -1,10 +1,13 @@
 // BULKUP API on Supabase Edge Functions: AI coach (streaming), food photo scanner, status.
-// Secrets (Supabase dashboard > Edge Functions > Secrets):
-//   ANTHROPIC_API_KEY  (required for AI)   ANTHROPIC_MODEL (optional, default claude-opus-5-5)
+// Secrets (Supabase dashboard > Edge Functions > Secrets). Set ONE of:
+//   GEMINI_API_KEY     Google Gemini (has a free tier)   GEMINI_MODEL (optional, default gemini-flash-latest)
+//   ANTHROPIC_API_KEY  Claude (paid)                      ANTHROPIC_MODEL (optional, default claude-opus-5-5)
+// If both are set, Gemini is used.
 //   AI_DAILY_COACH_LIMIT / AI_DAILY_SCAN_LIMIT (optional per-user daily limits)
 import Anthropic from "npm:@anthropic-ai/sdk@1.8.0";
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { CHECKIN_SYSTEM, COACH_SYSTEM, FOOD_SCAN_PROMPT, FOOD_SCAN_SCHEMA } from "./prompts.ts";
+import { GeminiError, geminiJson, geminiStream, toContents, toGeminiSchema, type GeminiConfig } from "./gemini.ts";
 
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-opus-5-5";
 const API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
@@ -20,7 +23,12 @@ function secretKey(): string {
   return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 }
 const admin = createClient(SUPABASE_URL, secretKey(), { auth: { persistSession: false, autoRefreshToken: false } });
-const anthropic = API_KEY ? new Anthropic({ apiKey: API_KEY }) : null;
+const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+const gemini: GeminiConfig | null = GEMINI_KEY
+  ? { apiKey: GEMINI_KEY, model: Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest", baseUrl: Deno.env.get("GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com" }
+  : null;
+const anthropic = !gemini && API_KEY ? new Anthropic({ apiKey: API_KEY }) : null;
+const provider: "gemini" | "claude" | null = gemini ? "gemini" : anthropic ? "claude" : null;
 
 // A declined request is retried on a fallback model inside the same call.
 const FALLBACK = { betas: ["server-side-fallback-2026-07-01" as const], fallbacks: "default" as const };
@@ -51,6 +59,7 @@ async function withinLimit(userId: string, kind: "coach" | "scan"): Promise<bool
 }
 
 function describe(e: unknown): { status: number; error: string; code: string } {
+  if (e instanceof GeminiError) return { status: e.status, error: e.message, code: e.code };
   if (e instanceof Anthropic.RateLimitError) return { status: 429, error: "The AI is busy right now. Try again in a minute.", code: "ai_rate_limited" };
   if (e instanceof Anthropic.AuthenticationError) return { status: 503, error: "The AI key isn't valid. The app owner needs to update it in Supabase.", code: "ai_auth" };
   if (e instanceof Anthropic.PermissionDeniedError) return { status: 503, error: "The AI account can't be used right now (check billing or credits).", code: "ai_permission" };
@@ -78,19 +87,45 @@ async function coach(req: Request, userId: string): Promise<Response> {
   const mode = body.mode === "checkin" ? "checkin" : "chat";
   if (!(await withinLimit(userId, "coach"))) return fail(429, `You've reached today's limit of ${COACH_LIMIT} coach messages. It resets tomorrow.`, "daily_limit");
 
+  const system = mode === "checkin" ? CHECKIN_SYSTEM : COACH_SYSTEM;
+  const dataBlock = `<user_data>\n${JSON.stringify(context)}\n</user_data>`;
+  const encoder = new TextEncoder();
+  const headers = { ...CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" };
+
+  if (gemini) {
+    const ctrl = new AbortController();
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const text of geminiStream(gemini, `${system}\n\n${dataBlock}`, toContents(body.messages), ctrl.signal)) controller.enqueue(encoder.encode(text));
+        } catch (e) {
+          if (!ctrl.signal.aborted) {
+            console.error("coach", e);
+            controller.enqueue(encoder.encode(`\u0000ERROR:${describe(e).error}`));
+          }
+        } finally {
+          controller.close();
+        }
+      },
+      cancel() {
+        ctrl.abort();
+      },
+    });
+    return new Response(readable, { headers });
+  }
+
   const stream = anthropic!.beta.messages.stream({
     model: MODEL,
     max_tokens: 8000,
     ...FALLBACK,
     output_config: { effort: mode === "checkin" ? "medium" : "low" },
     system: [
-      { type: "text", text: mode === "checkin" ? CHECKIN_SYSTEM : COACH_SYSTEM },
-      { type: "text", text: `<user_data>\n${JSON.stringify(context)}\n</user_data>` },
+      { type: "text", text: system },
+      { type: "text", text: dataBlock },
     ],
     messages: body.messages.map((m: ChatMessage) => ({ role: m.role, content: m.content })),
   });
 
-  const encoder = new TextEncoder();
   const readable = new ReadableStream({
     async start(controller) {
       try {
@@ -110,7 +145,7 @@ async function coach(req: Request, userId: string): Promise<Response> {
       stream.abort();
     },
   });
-  return new Response(readable, { headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" } });
+  return new Response(readable, { headers });
 }
 
 function validScan(v: unknown): v is { is_food: boolean; items: Record<string, unknown>[]; notes: string } {
@@ -127,6 +162,19 @@ async function foodScan(req: Request, userId: string): Promise<Response> {
   const hint = typeof body.hint === "string" ? body.hint.slice(0, 300) : "";
   if (!(await withinLimit(userId, "scan"))) return fail(429, `You've reached today's limit of ${SCAN_LIMIT} photo scans. It resets tomorrow.`, "daily_limit");
 
+  const prompt = hint ? `${FOOD_SCAN_PROMPT}\n\nThe user added this note about the meal: <note>${hint}</note>` : FOOD_SCAN_PROMPT;
+  if (gemini) {
+    try {
+      const parsed = await geminiJson(gemini, [{ inline_data: { mime_type: body.mediaType, data: body.imageBase64 } }, { text: prompt }], toGeminiSchema(FOOD_SCAN_SCHEMA) as Record<string, unknown>);
+      if (!validScan(parsed)) return fail(502, "The AI returned an unexpected result. Try again.", "ai_parse");
+      return json(parsed);
+    } catch (e) {
+      console.error("food-scan", e);
+      const d = describe(e);
+      return fail(d.status, d.error, d.code);
+    }
+  }
+
   try {
     const response = await anthropic!.beta.messages.create({
       model: MODEL,
@@ -138,7 +186,7 @@ async function foodScan(req: Request, userId: string): Promise<Response> {
           role: "user",
           content: [
             { type: "image", source: { type: "base64", media_type: body.mediaType, data: body.imageBase64 } },
-            { type: "text", text: hint ? `${FOOD_SCAN_PROMPT}\n\nThe user added this note about the meal: <note>${hint}</note>` : FOOD_SCAN_PROMPT },
+            { type: "text", text: prompt },
           ],
         },
       ],
@@ -166,13 +214,13 @@ Deno.serve(async (req) => {
   const route = new URL(req.url).pathname.split("/").filter(Boolean).pop();
 
   if (route === "status") {
-    return json({ ai: !!anthropic, model: anthropic ? MODEL : null, auth: "supabase", accountDeletion: false });
+    return json({ ai: !!provider, provider, model: gemini ? gemini.model : anthropic ? MODEL : null, auth: "supabase", accountDeletion: false });
   }
   if (req.method !== "POST" || (route !== "coach" && route !== "food-scan")) return fail(404, "Not found", "not_found");
 
   const userId = await currentUser(req);
   if (!userId) return fail(401, "Please sign in to use this feature.", "unauthenticated");
-  if (!anthropic) return fail(503, "AI features aren't switched on yet.", "ai_disabled");
+  if (!provider) return fail(503, "AI features aren't switched on yet.", "ai_disabled");
 
   try {
     return route === "coach" ? await coach(req, userId) : await foodScan(req, userId);
