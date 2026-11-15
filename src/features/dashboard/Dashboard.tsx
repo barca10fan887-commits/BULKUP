@@ -1,20 +1,18 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Barcode, Camera, CheckCircle2, ChevronRight, Dumbbell, Flame, Plus, Scale, Sparkles, Target } from "lucide-react";
+import { Barcode, Bot, Camera, Check, CheckCircle2, ChevronRight, Dumbbell, Pill as PillIcon, Plus, Scale } from "lucide-react";
 import { useProfile, useStore } from "@/data/store";
-import { today, formatDay, addDays } from "@/lib/dates";
-import { currentWeight, dailyTotals, entriesOn, isScheduled, completedSessions, targetProgress, weightTrendPerWeek } from "@/lib/stats";
+import { today, formatDay, addDays, nowTime } from "@/lib/dates";
+import { currentWeight, dailyTotals, isScheduled, completedSessions, targetProgress, weightTrendPerWeek, goalStatus } from "@/lib/stats";
 import { todaysFocus } from "@/lib/focus";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { GOAL_LABEL, simpleGoal } from "@/lib/calc";
+import { Card } from "@/components/ui/Card";
 import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
 import { Pill } from "@/components/ui/misc";
 import { WaterCard } from "@/features/water/WaterCard";
 import { kg, signed } from "@/lib/format";
 import { cn } from "@/components/ui/cn";
-import type { MealType } from "@/lib/types";
-
-const MEALS: MealType[] = ["breakfast", "lunch", "dinner", "snacks"];
-const MEAL_LABEL: Record<MealType, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snacks: "Snacks" };
+import { useToast } from "@/components/ui/Toast";
 
 function greeting() {
   const h = new Date().getHours();
@@ -27,200 +25,202 @@ export default function Dashboard() {
   const date = today();
   const t = profile.targets;
   const totals = dailyTotals(data.foodEntries, date);
-  const focus = useMemo(() => todaysFocus(data, profile, date), [data, profile, date]);
+  const focus = useMemo(() => todaysFocus(data, profile, date).filter((f) => f.id !== "calories" && f.id !== "protein" && f.id !== "water"), [data, profile, date]);
   const weight = currentWeight(data.bodyEntries, profile);
-  const progress = targetProgress(profile, weight);
+  const status = goalStatus(profile, weight);
   const trend = weightTrendPerWeek(data.bodyEntries, addDays(date, -27), date);
   const routines = isScheduled(data.routines, date);
   const doneToday = completedSessions(data.workoutSessions).find((s) => s.date === date);
-  const entries = entriesOn(data.foodEntries, date);
   const calLeft = Math.round(t.calories - totals.calories);
   const proLeft = Math.round(t.protein - totals.protein);
+  const goal = simpleGoal(profile.goal);
+  const over = calLeft < 0;
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-mist-400">{formatDay(date, { weekday: "long", day: "numeric", month: "long" })}</p>
-          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
-            {greeting()}, {profile.name}
-          </h1>
-        </div>
-        <Link to="/food" className="hidden sm:block">
-          <span className="inline-flex h-11 items-center gap-2 rounded-xl bg-volt-500 px-4 font-semibold text-white shadow-glow hover:bg-volt-400">
-            <Plus className="h-4 w-4" /> Log food
-          </span>
-        </Link>
+      <header>
+        <p className="text-sm text-mist-400">{formatDay(date, { weekday: "long", day: "numeric", month: "long" })}</p>
+        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+          {greeting()}, {profile.name}
+        </h1>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        {/* Calories & macros */}
-        <Card className="animate-rise lg:col-span-3">
-          <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
-            <ProgressRing value={totals.calories} max={t.calories} size={168} stroke={13} label="Calories eaten" tone={calLeft <= 0 ? "good" : "volt"}>
-              <div>
-                <p className="font-display text-3xl font-bold tabular-nums">{Math.round(totals.calories).toLocaleString()}</p>
-                <p className="text-xs text-mist-400">of {t.calories.toLocaleString()} kcal</p>
-                <p className={cn("mt-1 text-xs font-semibold", calLeft > 0 ? "text-volt-300" : "text-good")}>
-                  {calLeft > 0 ? `${calLeft.toLocaleString()} left` : "Target hit"}
-                </p>
+      {/* Today's numbers */}
+      <Card className="animate-rise">
+        <div className="flex items-center gap-5">
+          <ProgressRing value={totals.calories} max={t.calories} size={128} stroke={11} label="Calories eaten" tone={calLeft <= 0 && goal !== "cut" ? "good" : "volt"}>
+            <div>
+              <p className="font-display text-2xl font-bold tabular-nums">{Math.abs(calLeft).toLocaleString()}</p>
+              <p className="text-[11px] text-mist-400">{over ? "kcal over" : "kcal left"}</p>
+            </div>
+          </ProgressRing>
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div>
+              <div className="mb-1 flex items-baseline justify-between text-sm">
+                <span className="font-semibold">Calories</span>
+                <span className="tabular-nums text-mist-400">
+                  <span className="font-semibold text-mist-100">{Math.round(totals.calories).toLocaleString()}</span> / {t.calories.toLocaleString()}
+                </span>
               </div>
-            </ProgressRing>
-            <div className="flex w-full flex-1 flex-col gap-4">
-              <Macro label="Protein" value={totals.protein} goal={t.protein} highlight />
-              <Macro label="Carbs" value={totals.carbs} goal={t.carbs} />
-              <Macro label="Fat" value={totals.fat} goal={t.fat} />
+              <ProgressBar value={totals.calories} max={t.calories} tone={over && goal === "cut" ? "warn" : "volt"} label="Calories" />
             </div>
-          </div>
-        </Card>
-
-        {/* Today's focus */}
-        <Card className="animate-rise lg:col-span-2" style={{ animationDelay: "60ms" }}>
-          <CardHeader icon={<Sparkles className="h-4 w-4" />} title="Today's Focus" />
-          <ul className="flex flex-col gap-2">
-            {focus.slice(0, 5).map((f) => {
-              const body = (
-                <div className={cn("flex items-start gap-3 rounded-2xl border px-3.5 py-3 transition", f.tone === "action" ? "border-volt-500/30 bg-volt-500/[.07]" : f.tone === "good" ? "border-good/20 bg-good/[.06]" : "border-ink-700 bg-ink-900")}>
-                  {f.tone === "good" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" /> : <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", f.tone === "action" ? "bg-volt-400 shadow-[0_0_8px_#4d95ff]" : "bg-mist-500")} />}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-mist-100">{f.title}</p>
-                    {f.detail && <p className="text-xs text-mist-400">{f.detail}</p>}
-                  </div>
-                  {f.to && <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-mist-500" />}
-                </div>
-              );
-              return <li key={f.id}>{f.to ? <Link to={f.to}>{body}</Link> : body}</li>;
-            })}
-          </ul>
-        </Card>
-      </div>
-
-      {/* Quick actions */}
-      <div className="grid grid-cols-4 gap-2 sm:gap-3">
-        <QuickAction to="/food?add=search" icon={<Plus className="h-5 w-5" />} label="Log food" />
-        <QuickAction to="/food?add=barcode" icon={<Barcode className="h-5 w-5" />} label="Barcode" />
-        <QuickAction to="/food?add=photo" icon={<Camera className="h-5 w-5" />} label="Photo scan" />
-        <QuickAction to="/workouts" icon={<Dumbbell className="h-5 w-5" />} label="Workout" />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Daily summary */}
-        <Card className="lg:col-span-2">
-          <CardHeader
-            icon={<Flame className="h-4 w-4" />}
-            title="Daily summary"
-            action={
-              <Link to="/food" className="inline-flex items-center gap-1 text-sm font-semibold text-volt-400">
-                Diary <ArrowRight className="h-4 w-4" />
-              </Link>
-            }
-          />
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Pill tone={calLeft <= 0 ? "good" : "muted"}>{calLeft <= 0 ? "Calorie target reached" : `${calLeft.toLocaleString()} kcal to go`}</Pill>
-            <Pill tone={proLeft <= 0 ? "good" : "muted"}>{proLeft <= 0 ? "Protein target reached" : `${proLeft} g protein to go`}</Pill>
-          </div>
-          {entries.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-ink-600 px-4 py-6 text-center text-sm text-mist-400">Nothing logged yet today. Start with breakfast or a shake.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {MEALS.map((m) => {
-                const items = entries.filter((e) => e.meal === m);
-                const kcal = Math.round(items.reduce((a, e) => a + e.calories, 0));
-                return (
-                  <div key={m} className="rounded-2xl border border-ink-700 bg-ink-900 p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold uppercase tracking-[.08em] text-mist-500">{MEAL_LABEL[m]}</p>
-                      <p className="text-xs font-semibold tabular-nums text-mist-300">{kcal} kcal</p>
-                    </div>
-                    {items.length ? (
-                      <ul className="mt-1.5 space-y-0.5">
-                        {items.map((e) => (
-                          <li key={e.id} className="truncate text-sm text-mist-100">{e.name}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-1.5 text-sm text-mist-500">Not logged</p>
-                    )}
-                  </div>
-                );
-              })}
+            <div>
+              <div className="mb-1 flex items-baseline justify-between text-sm">
+                <span className="font-semibold">Protein</span>
+                <span className="tabular-nums text-mist-400">
+                  <span className="font-semibold text-mist-100">{Math.round(totals.protein)}</span> / {t.protein} g
+                </span>
+              </div>
+              <ProgressBar value={totals.protein} max={t.protein} tone={proLeft <= 0 ? "good" : "volt"} label="Protein" />
             </div>
-          )}
-          {(calLeft > 0 || proLeft > 0) && entries.length > 0 && (
-            <p className="mt-3 text-sm text-mist-300">
-              Still to eat: <span className="font-semibold text-mist-100">{Math.max(calLeft, 0).toLocaleString()} kcal</span> and <span className="font-semibold text-mist-100">{Math.max(proLeft, 0)} g protein</span>.
+            <p className="text-xs tabular-nums text-mist-500">
+              Carbs {Math.round(totals.carbs)}/{t.carbs} g · Fat {Math.round(totals.fat)}/{t.fat} g
             </p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <QuickAction to="/food?add=search" icon={<Plus className="h-5 w-5" />} label="Log food" primary />
+          <QuickAction to="/food?add=barcode" icon={<Barcode className="h-5 w-5" />} label="Scan" />
+          <QuickAction to="/food?add=photo" icon={<Camera className="h-5 w-5" />} label="Photo" />
+        </div>
+      </Card>
+
+      {/* Reminders for today (workout, supplements, weigh-in, check-in) */}
+      {focus.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {focus.slice(0, 3).map((f) => {
+            const body = (
+              <div className={cn("flex items-center gap-3 rounded-2xl border px-4 py-3", f.tone === "good" ? "border-good/20 bg-good/[.06]" : "border-ink-700 bg-ink-850")}>
+                {f.tone === "good" ? <CheckCircle2 className="h-4 w-4 shrink-0 text-good" /> : <span className={cn("h-2 w-2 shrink-0 rounded-full", f.tone === "action" ? "bg-volt-400 shadow-[0_0_8px_#4d95ff]" : "bg-mist-500")} />}
+                <p className="min-w-0 flex-1 text-sm font-semibold">{f.title}</p>
+                {f.to && <ChevronRight className="h-4 w-4 shrink-0 text-mist-500" />}
+              </div>
+            );
+            return <li key={f.id}>{f.to ? <Link to={f.to}>{body}</Link> : body}</li>;
+          })}
+        </ul>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* Weight goal */}
+        <Card>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-mist-300">Weight</p>
+                <Pill tone="volt">{GOAL_LABEL[goal]}</Pill>
+              </div>
+              <p className="mt-1 font-display text-3xl font-bold tabular-nums">{kg(weight)}</p>
+            </div>
+            <Link to="/progress" className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-700 px-3 text-sm font-semibold text-mist-100 hover:bg-ink-600">
+              <Scale className="h-4 w-4" /> Log
+            </Link>
+          </div>
+          {status.maintaining ? (
+            <p className="mt-3 text-sm text-mist-400">{status.label}</p>
+          ) : (
+            <>
+              <ProgressBar value={targetProgress(profile, weight)} max={100} className="mt-3" label="Progress to goal weight" tone={status.reached ? "good" : "volt"} />
+              <div className="mt-2 flex justify-between text-xs text-mist-400">
+                <span>{status.label}</span>
+                <span>Goal {kg(profile.targetWeightKg)}</span>
+              </div>
+            </>
           )}
+          {trend != null && <p className="mt-2 text-xs text-mist-500">Trend {signed(trend, 2)} kg/week · plan {signed(t.weeklyGainKg, 2)}</p>}
         </Card>
 
-        <div className="flex flex-col gap-4">
-          {/* Weight goal */}
-          <Card>
-            <CardHeader
-              icon={<Target className="h-4 w-4" />}
-              title="Weight goal"
-              subtitle={trend != null ? `Trend ${signed(trend, 2)} kg/week · plan +${t.weeklyGainKg}` : "Log weigh-ins to see your trend"}
-              action={
-                <Link to="/progress" aria-label="Log weight" className="grid h-9 w-9 place-items-center rounded-xl bg-ink-700 text-mist-300 hover:text-mist-100">
-                  <Scale className="h-4 w-4" />
-                </Link>
-              }
-            />
-            <div className="flex items-baseline justify-between">
-              <p className="font-display text-2xl font-bold tabular-nums">{kg(weight)}</p>
-              <p className="text-sm text-mist-400">Target {kg(profile.targetWeightKg)}</p>
-            </div>
-            <ProgressBar value={progress} max={100} className="mt-3" label="Progress to target weight" />
-            <div className="mt-2 flex justify-between text-xs text-mist-500">
-              <span>Start {kg(profile.startWeightKg)}</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-          </Card>
-
-          {/* Workout */}
-          <Card>
-            <CardHeader icon={<Dumbbell className="h-4 w-4" />} title="Training" />
-            {doneToday ? (
-              <p className="text-sm text-good">Completed {doneToday.name} today. Nice work.</p>
-            ) : routines.length ? (
-              <Link to="/workouts" className="flex items-center justify-between rounded-2xl border border-volt-500/30 bg-volt-500/[.07] px-4 py-3">
-                <div>
-                  <p className="text-xs text-mist-400">Scheduled today</p>
-                  <p className="font-semibold">{routines.map((r) => r.name).join(" + ")}</p>
-                </div>
-                <span className="rounded-xl bg-volt-500 px-3 py-1.5 text-sm font-semibold text-white">Start</span>
+        {/* Training */}
+        <Card>
+          <p className="text-sm font-semibold text-mist-300">Training</p>
+          {doneToday ? (
+            <p className="mt-2 flex items-center gap-2 text-good">
+              <CheckCircle2 className="h-5 w-5" /> {doneToday.name} done today
+            </p>
+          ) : routines.length ? (
+            <>
+              <p className="mt-1 font-display text-xl font-semibold">{routines.map((r) => r.name).join(" + ")}</p>
+              <Link to="/workouts" className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-volt-500 font-semibold text-white shadow-glow hover:bg-volt-400">
+                <Dumbbell className="h-4 w-4" /> Start workout
               </Link>
-            ) : (
-              <p className="text-sm text-mist-400">Rest day. Recovery and food are where growth happens.</p>
-            )}
-          </Card>
-        </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-mist-400">Rest day. Recovery is part of the plan.</p>
+          )}
+        </Card>
       </div>
 
       <WaterCard date={date} />
-    </div>
-  );
-}
+      <SupplementsQuick />
 
-function Macro({ label, value, goal, highlight }: { label: string; value: number; goal: number; highlight?: boolean }) {
-  return (
-    <div>
-      <div className="mb-1.5 flex items-baseline justify-between text-sm">
-        <span className={cn("font-semibold", highlight ? "text-mist-100" : "text-mist-300")}>{label}</span>
-        <span className="tabular-nums text-mist-400">
-          <span className="font-semibold text-mist-100">{Math.round(value)}</span> / {goal} g
+      <Link to="/coach" className="flex items-center gap-3 rounded-3xl border border-ink-700 bg-ink-850 p-4 transition hover:border-volt-500/40">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-volt-500/15 text-volt-400">
+          <Bot className="h-5 w-5" />
         </span>
-      </div>
-      <ProgressBar value={value} max={goal} tone={value >= goal ? "good" : highlight ? "volt" : "muted"} label={`${label} progress`} />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">Ask your coach</p>
+          <p className="truncate text-sm text-mist-400">"What should I eat today?"</p>
+        </div>
+        <ChevronRight className="h-5 w-5 text-mist-500" />
+      </Link>
     </div>
   );
 }
 
-function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+/** One-tap supplement logging. Hidden until the user adds a supplement. */
+function SupplementsQuick() {
+  const { data, add } = useStore();
+  const toast = useToast();
+  const t = today();
+  const supps = data.supplements.filter((s) => s.active);
+  if (!supps.length) return null;
   return (
-    <Link to={to} className="group flex flex-col items-center gap-2 rounded-2xl border border-ink-700 bg-ink-850 px-2 py-3.5 text-center transition hover:border-volt-500/40 hover:bg-ink-800">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-volt-500/12 text-volt-400 transition group-hover:bg-volt-500 group-hover:text-white">{icon}</span>
-      <span className="text-xs font-semibold text-mist-300">{label}</span>
+    <Card>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="flex items-center gap-2 text-sm font-semibold text-mist-300">
+          <PillIcon className="h-4 w-4" /> Supplements
+        </p>
+        <Link to="/supplements" className="text-sm font-semibold text-volt-400">
+          Manage
+        </Link>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {supps.map((s) => {
+          const taken = data.supplementLogs.filter((l) => l.supplementId === s.id && l.date === t).reduce((a, l) => a + l.servings, 0);
+          const done = taken >= s.dailyServings;
+          return (
+            <button
+              key={s.id}
+              disabled={done}
+              onClick={() => {
+                let foodEntryId: string | undefined;
+                if (s.calories > 0) foodEntryId = add("foodEntries", { date: t, meal: "snacks", name: s.name, servingLabel: `${s.servingAmount} ${s.servingUnit}`, quantity: 1, calories: s.calories, protein: s.protein, carbs: s.carbs, fat: s.fat, source: "supplement" }).id;
+                add("supplementLogs", { date: t, supplementId: s.id, servings: 1, time: nowTime(), foodEntryId });
+                toast.show({ message: `Logged ${s.name}` });
+              }}
+              className={cn("inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-semibold transition", done ? "border-good/30 bg-good/10 text-good" : "border-ink-600 bg-ink-900 text-mist-100 hover:border-volt-500/50")}
+            >
+              {done ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {s.name}
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function QuickAction({ to, icon, label, primary }: { to: string; icon: React.ReactNode; label: string; primary?: boolean }) {
+  return (
+    <Link
+      to={to}
+      className={cn(
+        "flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition",
+        primary ? "bg-volt-500 text-white shadow-glow hover:bg-volt-400" : "border border-ink-600 bg-ink-900 text-mist-100 hover:border-ink-500",
+      )}
+    >
+      {icon}
+      {label}
     </Link>
   );
 }

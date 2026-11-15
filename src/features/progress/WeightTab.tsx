@@ -3,7 +3,7 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Too
 import { Scale, Trash2 } from "lucide-react";
 import { useProfile, useStore } from "@/data/store";
 import { addDays, formatDay, today } from "@/lib/dates";
-import { currentWeight, targetProgress, weightAsOf, weightEntries, weightTrendPerWeek } from "@/lib/stats";
+import { currentWeight, goalStatus, targetProgress, weightAsOf, weightEntries, weightTrendPerWeek } from "@/lib/stats";
 import { kg, round, signed } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +31,7 @@ export function WeightTab() {
   const weekAgo = weightAsOf(data.bodyEntries, addDays(t, -7));
   const monthAgo = weightAsOf(data.bodyEntries, addDays(t, -30));
   const trend = weightTrendPerWeek(data.bodyEntries, addDays(t, -27), t);
-  const toGo = round(profile.targetWeightKg - current, 1);
+  const status = goalStatus(profile, current);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -115,12 +115,12 @@ export function WeightTab() {
           <Stat label="Current" value={kg(current)} sub={`${signed(current - profile.startWeightKg)} kg total`} />
           <Stat label="This week" value={weekAgo != null ? `${signed(current - weekAgo)} kg` : "–"} sub="vs 7 days ago" />
           <Stat label="This month" value={monthAgo != null ? `${signed(current - monthAgo)} kg` : "–"} sub="vs 30 days ago" />
-          <Stat label="Trend" value={trend != null ? `${signed(trend, 2)}` : "–"} sub={`kg/wk · plan +${profile.targets.weeklyGainKg}`} />
+          <Stat label="Trend" value={trend != null ? `${signed(trend, 2)}` : "–"} sub={`kg/wk · plan ${signed(profile.targets.weeklyGainKg, 2)}`} />
         </div>
         <div className="mt-5">
           <div className="mb-1.5 flex justify-between text-sm">
-            <span className="text-mist-300">Progress to {kg(profile.targetWeightKg)}</span>
-            <span className="tabular-nums text-mist-400">{toGo > 0 ? `${toGo} kg to go` : "Target reached"}</span>
+            <span className="text-mist-300">Progress to {kg(profile.targetWeightKg)} goal</span>
+            <span className="tabular-nums text-mist-400">{status.label}</span>
           </div>
           <ProgressBar value={targetProgress(profile, current)} max={100} label="Progress to target weight" />
         </div>
@@ -157,6 +157,7 @@ export function WeightTab() {
 /** Average weight per week for the last 8 weeks. */
 function WeeklyTable() {
   const { data } = useStore();
+  const profile = useProfile();
   const t = today();
   const rows = Array.from({ length: 8 }, (_, i) => {
     const end = addDays(t, -7 * i);
@@ -187,7 +188,7 @@ function WeeklyTable() {
                 <tr key={r.start} className="border-t border-ink-700/60">
                   <td className="py-2 text-mist-300">{formatDay(r.start, { day: "numeric", month: "short" })}</td>
                   <td className="py-2 font-semibold tabular-nums">{r.avg != null ? `${r.avg} kg` : "–"}</td>
-                  <td className={`py-2 tabular-nums ${change == null ? "text-mist-500" : change >= 0 ? "text-good" : "text-warn"}`}>{change != null ? `${signed(change)} kg` : "–"}</td>
+                  <td className={`py-2 tabular-nums ${change == null ? "text-mist-500" : Math.sign(change) === Math.sign(profile.targets.weeklyGainKg) || profile.targets.weeklyGainKg === 0 ? "text-good" : "text-warn"}`}>{change != null ? `${signed(change)} kg` : "–"}</td>
                   <td className="py-2 tabular-nums text-mist-400">{r.n}</td>
                 </tr>
               );

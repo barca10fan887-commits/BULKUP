@@ -67,7 +67,7 @@ export default function CheckInPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="Starting weight" value={stats.startWeightKg != null ? `${stats.startWeightKg} kg` : "–"} />
           <Stat label="Current weight" value={stats.endWeightKg != null ? `${stats.endWeightKg} kg` : "–"} />
-          <Stat label="Change" value={stats.changeKg != null ? `${signed(stats.changeKg, 2)} kg` : "–"} sub={`Plan +${profile.targets.weeklyGainKg} kg`} />
+          <Stat label="Change" value={stats.changeKg != null ? `${signed(stats.changeKg, 2)} kg` : "–"} sub={`Plan ${signed(profile.targets.weeklyGainKg, 2)} kg`} />
           <Stat label="To target" value={stats.targetProgressPct != null ? `${stats.targetProgressPct}%` : "–"} sub="of the way there" />
           <Stat label="Avg calories" value={stats.avgCalories ? stats.avgCalories.toLocaleString() : "–"} sub={`target ${profile.targets.calories.toLocaleString()} · ${stats.daysLogged}/7 days logged`} />
           <Stat label="Avg protein" value={stats.avgProtein ? `${stats.avgProtein} g` : "–"} sub={`target ${profile.targets.protein} g`} />

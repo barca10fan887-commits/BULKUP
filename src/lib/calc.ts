@@ -43,31 +43,52 @@ export function maintenanceCalories(i: BodyInputs): number {
   return bmr(i) * activityMultiplier(i.trainingDays, i.dailyActivity);
 }
 
-const SURPLUS: Record<Goal, number> = { lean_bulk: 250, bulk: 400, gain_weight: 550, strength: 300 };
-const EXPERIENCE_SCALE: Record<Experience, number> = { beginner: 1.1, intermediate: 1, advanced: 0.8 };
+export type SimpleGoal = "cut" | "maintain" | "bulk";
 
-export function suggestedSurplus(goal: Goal, experience: Experience): number {
-  return Math.round((SURPLUS[goal] * EXPERIENCE_SCALE[experience]) / 25) * 25;
+export function simpleGoal(goal: Goal): SimpleGoal {
+  if (goal === "cut") return "cut";
+  if (goal === "maintain" || goal === "strength") return "maintain";
+  return "bulk";
 }
 
-/** Suggested weekly gain as a fraction of body weight. */
-const GAIN_RATE: Record<Experience, number> = { beginner: 0.005, intermediate: 0.0035, advanced: 0.0025 };
-const GOAL_RATE_SCALE: Record<Goal, number> = { lean_bulk: 0.7, bulk: 1, gain_weight: 1.25, strength: 0.8 };
+export const GOAL_LABEL: Record<SimpleGoal, string> = { cut: "Cut", maintain: "Maintain", bulk: "Bulk" };
 
-export function suggestedWeeklyGainKg(weightKg: number, experience: Experience, goal: Goal): number {
-  return round(weightKg * GAIN_RATE[experience] * GOAL_RATE_SCALE[goal], 2);
+/** Daily calorie change from maintenance: a deficit for a cut, a surplus for a bulk. */
+export function calorieAdjustment(goal: Goal, experience: Experience): number {
+  const g = simpleGoal(goal);
+  if (g === "maintain") return 0;
+  if (g === "cut") return experience === "advanced" ? -400 : -500;
+  const base = goal === "lean_bulk" ? 250 : goal === "gain_weight" ? 550 : 400;
+  const scale = experience === "beginner" ? 1.1 : experience === "advanced" ? 0.8 : 1;
+  return Math.round((base * scale) / 25) * 25;
+}
+
+/** @deprecated kept for older callers; same as calorieAdjustment. */
+export const suggestedSurplus = calorieAdjustment;
+
+/** Suggested weekly weight change in kg (negative when cutting). */
+export function suggestedWeeklyChangeKg(weightKg: number, experience: Experience, goal: Goal): number {
+  const g = simpleGoal(goal);
+  if (g === "maintain") return 0;
+  if (g === "cut") return round(-weightKg * 0.006, 2);
+  const rate = experience === "beginner" ? 0.005 : experience === "intermediate" ? 0.0035 : 0.0025;
+  const scale = goal === "lean_bulk" ? 0.7 : goal === "gain_weight" ? 1.25 : 1;
+  return round(weightKg * rate * scale, 2);
 }
 
 export function proteinTarget(weightKg: number, goal: Goal): number {
-  const perKg = goal === "lean_bulk" ? 2.2 : 2.0;
+  const g = simpleGoal(goal);
+  const perKg = g === "cut" ? 2.2 : g === "maintain" ? 1.8 : 2.0;
   return Math.round(weightKg * perKg);
 }
 
 export function computeTargets(i: BodyInputs): Targets {
   const maintenance = maintenanceCalories(i);
-  const calories = Math.round((maintenance + suggestedSurplus(i.goal, i.experience)) / 10) * 10;
+  // Never suggest eating below basal metabolic rate (or 1,200 kcal) when cutting.
+  const floor = Math.max(1200, bmr(i));
+  const calories = Math.round(Math.max(floor, maintenance + calorieAdjustment(i.goal, i.experience)) / 10) * 10;
   const protein = proteinTarget(i.weightKg, i.goal);
-  const fat = Math.round((calories * 0.27) / 9);
+  const fat = Math.max(Math.round(i.weightKg * 0.6), Math.round((calories * 0.27) / 9));
   const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
   return {
     calories,
@@ -75,7 +96,7 @@ export function computeTargets(i: BodyInputs): Targets {
     carbs,
     fat,
     waterMl: Math.round((i.weightKg * 35 + i.trainingDays * 70) / 250) * 250,
-    weeklyGainKg: suggestedWeeklyGainKg(i.weightKg, i.experience, i.goal),
+    weeklyGainKg: suggestedWeeklyChangeKg(i.weightKg, i.experience, i.goal),
   };
 }
 
@@ -92,11 +113,17 @@ export function inputsFromProfile(p: Profile, currentWeightKg?: number): BodyInp
   };
 }
 
-/** Weeks to reach the target at the planned rate. Null if already there or no rate. */
-export function weeksToTarget(currentKg: number, targetKg: number, weeklyGainKg: number): number | null {
+/** Weeks to reach the target at the planned rate. Null if already there or the rate points the wrong way. */
+export function weeksToTarget(currentKg: number, targetKg: number, weeklyChangeKg: number): number | null {
   const diff = targetKg - currentKg;
-  if (diff <= 0 || weeklyGainKg <= 0) return null;
-  return Math.ceil(diff / weeklyGainKg);
+  if (Math.abs(diff) < 0.05 || weeklyChangeKg === 0 || Math.sign(diff) !== Math.sign(weeklyChangeKg)) return null;
+  return Math.ceil(diff / weeklyChangeKg);
+}
+
+/** Which way the user wants their weight to go. */
+export function direction(startKg: number, targetKg: number): -1 | 0 | 1 {
+  const d = targetKg - startKg;
+  return Math.abs(d) < 0.25 ? 0 : d > 0 ? 1 : -1;
 }
 
 /** Macros from calories for a food: Atwater check used to sanity-check manual entries. */

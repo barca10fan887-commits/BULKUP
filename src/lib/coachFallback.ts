@@ -7,6 +7,32 @@ import { nextWorkoutPlan } from "./coachContext";
 import { BUILTIN_FOODS } from "./foodDb";
 import { round } from "./format";
 
+export type Pace = "on_track" | "too_slow" | "too_fast" | "wrong_way";
+
+/** Compares an observed weekly change with the plan. Works for cuts (negative), bulks and maintenance. */
+export function assessPace(actual: number, planned: number): Pace {
+  if (planned === 0) return Math.abs(actual) <= 0.2 ? "on_track" : "wrong_way";
+  const ratio = actual / planned; // 1 = exactly on plan; negative = moving the wrong way
+  if (ratio < 0) return "wrong_way";
+  if (ratio < 0.5) return "too_slow";
+  if (ratio > 1.7) return "too_fast";
+  return "on_track";
+}
+
+const fmtKg = (n: number) => `${n > 0 ? "+" : ""}${n}`;
+
+/** What to change, given the pace and whether intake matched the target. */
+function paceAdvice(pace: Pace, planned: number, actual: number, avgCalories: number | null, target: number): string {
+  const cutting = planned < 0;
+  const maintaining = planned === 0;
+  const offTarget = avgCalories != null && (cutting ? avgCalories > target + 150 : avgCalories < target - 150);
+  if (pace === "on_track") return "That's on track. Keep doing what you're doing.";
+  if (offTarget) return cutting ? "You're eating above your target. Hitting the target consistently is the first fix." : "You're eating below your target. Hitting the target consistently is the first fix.";
+  if (maintaining) return actual > 0 ? "Your weight is creeping up. Trim about 150 kcal a day." : "Your weight is drifting down. Add about 150 kcal a day.";
+  if (pace === "too_fast") return cutting ? "You're losing faster than planned, which can cost muscle. Add about 150 kcal a day." : "You're gaining faster than planned. Trim about 150 kcal a day to limit fat gain.";
+  return cutting ? "If you're on target and the scale isn't moving, lower your calories by about 150-200 kcal for the next 2 weeks or add some daily steps." : "If you're on target and still not gaining, raise your calories by about 150-200 kcal for the next 2 weeks.";
+}
+
 type Intent = "calories" | "protein" | "eat" | "rate" | "workout" | "plateau" | "week" | "routine" | "unknown";
 
 export function detectIntent(q: string): Intent {
@@ -59,23 +85,17 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
       if (proLeft <= 0) return `You've hit your protein target: ${Math.round(totals.protein)} g of ${t.protein} g.`;
       return `You need **${proLeft} g more protein** today (${Math.round(totals.protein)} of ${t.protein} g). Options from the food list:\n${suggestFoods(profile, proLeft * 6, proLeft).map((f) => `- ${f.name} (${f.servingSize} ${f.servingUnit}): ${f.protein} g protein`).join("\n")}`;
     case "eat":
-      if (calLeft <= 0 && proLeft <= 0) return "You've hit both your calorie and protein targets today. Nothing more is needed; eat to appetite.";
+      if (calLeft <= 0 && proLeft <= 0) return t.weeklyGainKg < 0 ? "You've reached your calorie and protein targets for today. If you're hungry, pick something low in calories like vegetables or a salad." : "You've hit both your calorie and protein targets today. Nothing more is needed; eat to appetite.";
       return `You still need about **${Math.max(calLeft, 0)} kcal** and **${Math.max(proLeft, 0)} g protein** today. Some foods that fit:\n${foodsLine(calLeft, proLeft)}`;
     case "rate":
     case "plateau": {
-      if (trend == null) return "I need at least two weigh-ins about a week apart to judge your rate of gain. Log your weight on the Progress page a few mornings a week.";
+      if (trend == null) return "I need at least two weigh-ins about a week apart to judge your progress. Log your weight on the Progress page a few mornings a week.";
       const planned = t.weeklyGainKg;
-      const lines = [`Over the last 4 weeks your weight trend is **${trend > 0 ? "+" : ""}${trend} kg/week**. Your plan is +${planned} kg/week.`];
+      const lines = [`Over the last 4 weeks your weight trend is **${fmtKg(trend)} kg/week**. Your plan is ${fmtKg(planned)} kg/week.`];
       const recent = Array.from({ length: 7 }, (_, i) => dailyTotals(data.foodEntries, addDays(date, -i))).filter((m) => m.calories > 0);
       const avg = recent.length ? Math.round(recent.reduce((a, m) => a + m.calories, 0) / recent.length) : null;
       if (avg != null) lines.push(`Your average logged intake over the last ${recent.length} logged days is ${avg} kcal against a ${t.calories} kcal target.`);
-      if (trend < planned * 0.5) {
-        lines.push(avg != null && avg < t.calories - 150 ? "You're eating below target. Hitting the target consistently is the first fix." : "If you're hitting the target and still not gaining, raise your calorie target by about 150-200 kcal for the next 2 weeks.");
-      } else if (trend > planned * 1.6) {
-        lines.push("You're gaining faster than planned. Consider trimming 150 kcal a day to limit fat gain.");
-      } else {
-        lines.push("That's on track. Keep doing what you're doing.");
-      }
+      lines.push(paceAdvice(assessPace(trend, planned), planned, trend, avg, t.calories));
       return lines.join("\n\n");
     }
     case "workout": {
@@ -100,32 +120,39 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
         `You've completed ${sessions.length} workouts in the last 14 days (${perWeek} per week) against a plan of ${profile.trainingDays} per week.`,
       ];
       if (perWeek < profile.trainingDays * 0.75) tips.push("Consistency is the biggest lever right now. Pick fixed training times and schedule them in the Workouts calendar.");
-      if (trend != null && trend < t.weeklyGainKg * 0.5) tips.push(`Weight is moving slower than planned (${trend} kg/week). Add about 150-200 kcal a day this week.`);
+      if (trend != null && assessPace(trend, t.weeklyGainKg) !== "on_track") tips.push(`Your weight trend is ${fmtKg(trend)} kg/week against a plan of ${fmtKg(t.weeklyGainKg)}. ${paceAdvice(assessPace(trend, t.weeklyGainKg), t.weeklyGainKg, trend, null, t.calories)}`);
       tips.push("Aim to add a rep or a little weight on your main lifts each week, and keep 1-3 reps in reserve on most sets.");
       return tips.join("\n\n");
     }
     default:
-      return `Here's where you stand today: ${Math.round(totals.calories)}/${t.calories} kcal, ${Math.round(totals.protein)}/${t.protein} g protein, current weight ${weight} kg (target ${profile.targetWeightKg} kg).\n\nThe basic coach can answer questions like "How many calories do I have left?", "What should I eat to reach my protein target?", "Am I gaining weight fast enough?" or "What should my next workout be?".`;
+      return `Here's where you stand today: ${Math.round(totals.calories)}/${t.calories} kcal, ${Math.round(totals.protein)}/${t.protein} g protein, current weight ${weight} kg (target ${profile.targetWeightKg} kg).\n\nThe basic coach can answer questions like "How many calories do I have left?", "What should I eat to reach my protein target?", "Am I on track?" or "What should my next workout be?".`;
   }
 }
 
 export function basicCheckInReview(stats: WeeklyStats, profile: Profile): string {
   const t = profile.targets;
+  const planned = t.weeklyGainKg;
   const out: string[] = [];
+  const offTarget = planned < 0 ? stats.avgCalories > t.calories + 150 : stats.avgCalories < t.calories - 150;
   if (stats.changeKg == null) out.push("There weren't enough weigh-ins to measure your weight change this week. Try to weigh in at least 3 mornings next week.");
-  else if (stats.changeKg < t.weeklyGainKg * 0.5) out.push(`You changed ${stats.changeKg} kg this week, below your +${t.weeklyGainKg} kg plan.`);
-  else if (stats.changeKg > t.weeklyGainKg * 1.8) out.push(`You gained ${stats.changeKg} kg, faster than your +${t.weeklyGainKg} kg plan. Some of this may be water; watch next week's trend.`);
-  else out.push(`You gained ${stats.changeKg} kg, right in line with your plan.`);
+  else {
+    const pace = assessPace(stats.changeKg, planned);
+    out.push(`Your weight changed ${fmtKg(stats.changeKg)} kg this week against a plan of ${fmtKg(planned)} kg. ${pace === "on_track" ? "That's right on plan." : "One week can be water, so watch the trend."}`);
+  }
 
   if (stats.daysLogged < 5) out.push(`You logged food on ${stats.daysLogged} of 7 days. Logging more days will make these numbers reliable.`);
-  else if (stats.avgCalories < t.calories - 150) out.push(`Average intake was ${stats.avgCalories} kcal, about ${t.calories - stats.avgCalories} kcal under target. Close that gap before raising the target.`);
+  else if (offTarget) out.push(`Average intake was ${stats.avgCalories} kcal against a ${t.calories} kcal target. Getting closer to the target is the first fix.`);
   else out.push(`Average intake was ${stats.avgCalories} kcal against ${t.calories} kcal. Good consistency.`);
 
   if (stats.avgProtein < t.protein * 0.9) out.push(`Protein averaged ${stats.avgProtein} g against ${t.protein} g. Add a protein source to one more meal each day.`);
   out.push(`Workouts: ${stats.workoutsCompleted} of ${stats.workoutsPlanned} (${stats.consistencyPct}%).`);
 
-  if (stats.changeKg != null && stats.changeKg < t.weeklyGainKg * 0.5 && stats.avgCalories >= t.calories - 150 && stats.daysLogged >= 5) {
-    out.push(`Suggested adjustment: raise your calorie target to about ${t.calories + 150} kcal for next week.`);
+  if (stats.changeKg != null && stats.daysLogged >= 5 && !offTarget) {
+    const pace = assessPace(stats.changeKg, planned);
+    if (planned > 0 && pace === "too_slow") out.push(`Suggested adjustment: raise your calorie target to about ${t.calories + 150} kcal for next week.`);
+    if (planned < 0 && pace === "too_slow") out.push(`Suggested adjustment: lower your calorie target to about ${Math.max(1200, t.calories - 150)} kcal for next week.`);
+    if (planned < 0 && pace === "too_fast") out.push(`Suggested adjustment: raise your calorie target to about ${t.calories + 150} kcal to protect muscle.`);
+    if (planned > 0 && pace === "too_fast") out.push(`Suggested adjustment: lower your calorie target to about ${t.calories - 150} kcal for next week.`);
   }
   return out.join("\n\n");
 }

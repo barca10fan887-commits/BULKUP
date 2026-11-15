@@ -18,7 +18,12 @@ export function todaysFocus(data: AppData, profile: Profile, date: ISODate, hour
   const items: FocusItem[] = [];
 
   const calLeft = Math.round(t.calories - totals.calories);
-  if (calLeft > 0) {
+  const cutting = t.weeklyGainKg < 0;
+  if (cutting && calLeft < 0) {
+    items.push({ id: "calories", tone: "info", title: `You're ${Math.abs(calLeft).toLocaleString()} kcal over today's target`, detail: "No stress. Get back on track at your next meal." });
+  } else if (cutting && calLeft > 0) {
+    items.push({ id: "calories", tone: "action", title: `${calLeft.toLocaleString()} calories left today`, detail: "Plan your remaining meals around protein to stay full.", to: "/food" });
+  } else if (calLeft > 0) {
     const mealsLeft = hour < 11 ? 3 : hour < 15 ? 2 : hour < 20 ? 1 : 1;
     items.push({
       id: "calories",

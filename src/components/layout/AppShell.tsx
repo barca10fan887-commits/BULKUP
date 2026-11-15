@@ -1,32 +1,22 @@
-import { useState, type ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, UtensilsCrossed, Dumbbell, LineChart, Pill, Bot, Settings, CalendarDays, ClipboardCheck, Droplets, MoreHorizontal } from "lucide-react";
+import type { ReactNode } from "react";
+import { NavLink } from "react-router-dom";
+import { LayoutDashboard, UtensilsCrossed, Dumbbell, LineChart, CircleUser } from "lucide-react";
 import { cn } from "@/components/ui/cn";
-import { Sheet } from "@/components/ui/Sheet";
 import { Logo } from "./Logo";
 import { useStore } from "@/data/store";
 
+// Five destinations only. Everything else (coach, supplements, water, history,
+// check-ins) is reached from Home or Me.
 const NAV = [
-  { to: "/", label: "Dashboard", short: "Home", icon: LayoutDashboard, mobile: true },
-  { to: "/food", label: "Food", short: "Food", icon: UtensilsCrossed, mobile: true },
-  { to: "/workouts", label: "Workouts", short: "Train", icon: Dumbbell, mobile: true },
-  { to: "/progress", label: "Progress", short: "Progress", icon: LineChart, mobile: true },
-  { to: "/supplements", label: "Supplements", short: "Supps", icon: Pill, mobile: false },
-  { to: "/coach", label: "AI Coach", short: "Coach", icon: Bot, mobile: false },
-  { to: "/settings", label: "Profile & Settings", short: "Profile", icon: Settings, mobile: false },
-] as const;
-
-const SECONDARY = [
-  { to: "/water", label: "Water", icon: Droplets },
-  { to: "/calendar", label: "Calendar & history", icon: CalendarDays },
-  { to: "/check-in", label: "Weekly check-in", icon: ClipboardCheck },
+  { to: "/", label: "Home", icon: LayoutDashboard },
+  { to: "/food", label: "Food", icon: UtensilsCrossed },
+  { to: "/workouts", label: "Train", icon: Dumbbell },
+  { to: "/progress", label: "Progress", icon: LineChart },
+  { to: "/settings", label: "Me", icon: CircleUser },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [more, setMore] = useState(false);
-  const loc = useLocation();
   const { profile, repo } = useStore();
-  const moreActive = [...NAV.filter((n) => !n.mobile), ...SECONDARY].some((n) => loc.pathname.startsWith(n.to));
 
   return (
     <div className="min-h-dvh bg-ink-950 lg:flex">
@@ -37,10 +27,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="mt-8 flex flex-1 flex-col gap-1" aria-label="Main">
           {NAV.map((n) => (
-            <SideLink key={n.to} to={n.to} icon={<n.icon className="h-[18px] w-[18px]" />} label={n.label} />
-          ))}
-          <p className="mb-1 mt-6 px-3 text-[11px] font-semibold uppercase tracking-[.1em] text-mist-500">Tracking</p>
-          {SECONDARY.map((n) => (
             <SideLink key={n.to} to={n.to} icon={<n.icon className="h-[18px] w-[18px]" />} label={n.label} />
           ))}
         </nav>
@@ -73,35 +59,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-800 bg-ink-950/90 backdrop-blur-xl lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}
       >
-        <div className="mx-auto grid max-w-lg grid-cols-6">
-          {NAV.filter((n) => n.mobile).map((n) => (
-            <BottomLink key={n.to} to={n.to} label={n.short} icon={n.icon} />
+        <div className="mx-auto grid max-w-lg grid-cols-5">
+          {NAV.map((n) => (
+            <BottomLink key={n.to} to={n.to} label={n.label} icon={n.icon} />
           ))}
-          <BottomLink to="/coach" label="Coach" icon={Bot} />
-          <button onClick={() => setMore(true)} className={cn("flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold", moreActive ? "text-volt-400" : "text-mist-500")} aria-label="More sections">
-            <MoreHorizontal className="h-[22px] w-[22px]" />
-            More
-          </button>
         </div>
       </nav>
-
-      <Sheet open={more} onClose={() => setMore(false)} title="More">
-        <div className="grid grid-cols-2 gap-2.5 pb-2">
-          {[...NAV.filter((n) => !n.mobile && n.to !== "/coach"), ...SECONDARY].map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              onClick={() => setMore(false)}
-              className={({ isActive }) =>
-                cn("flex items-center gap-3 rounded-2xl border p-4 text-sm font-semibold transition", isActive ? "border-volt-500/50 bg-volt-500/10 text-volt-300" : "border-ink-700 bg-ink-900 text-mist-100 hover:border-ink-600")
-              }
-            >
-              <n.icon className="h-5 w-5" />
-              {n.label}
-            </NavLink>
-          ))}
-        </div>
-      </Sheet>
     </div>
   );
 }

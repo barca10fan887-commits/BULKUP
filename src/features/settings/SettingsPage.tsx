@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
-import { Bell, Database, Download, LogOut, RefreshCw, Shield, Target, Trash2, User } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Bell, Bot, CalendarDays, ChevronRight, ClipboardCheck, Database, Download, Droplets, LogOut, Pill as PillIcon, RefreshCw, Shield, Target, Trash2, User } from "lucide-react";
 import type { Profile, ReminderPrefs, Targets } from "@/lib/types";
 import { useProfile, useStore } from "@/data/store";
 import { useAuth } from "@/auth/AuthProvider";
-import { computeTargets, inputsFromProfile } from "@/lib/calc";
+import { supabase } from "@/data/supabase";
+import { GOAL_LABEL, computeTargets, inputsFromProfile, simpleGoal } from "@/lib/calc";
 import { currentWeight } from "@/lib/stats";
 import { WEEKDAYS_SHORT } from "@/lib/dates";
 import { deleteCloudAccount, getAccessCode, getStatus, setAccessCode } from "@/lib/api";
@@ -17,7 +18,7 @@ import { Input, Select, Toggle, num } from "@/components/ui/Field";
 import { Disclaimer, PageHeader, Pill } from "@/components/ui/misc";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
-import { AboutFields, BodyFields, DietFields, TrainingFields, validateDraft, type Errors, type ProfileDraft } from "@/features/onboarding/ProfileFields";
+import { BodyFields, DietFields, GoalFields, TrainingFields, effectiveTarget, validateDraft, type Errors, type ProfileDraft } from "@/features/onboarding/ProfileFields";
 import { PlanSummary, TARGETS_DISCLAIMER, TargetsEditor } from "@/features/onboarding/TargetsEditor";
 
 export default function SettingsPage() {
@@ -28,9 +29,10 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Profile & settings" />
-      <AccountSection />
+      <PageHeader title="Me" />
       <ProfileSection />
+      <QuickLinks />
+      <AccountSection />
       <TargetsSection />
       <NotificationsSection />
       <PrivacySection />
@@ -46,6 +48,29 @@ function Section({ id, icon, title, subtitle, children, action }: { id?: string;
       <CardHeader icon={icon} title={title} subtitle={subtitle} action={action} />
       {children}
     </Card>
+  );
+}
+
+function QuickLinks() {
+  const links = [
+    { to: "/coach", label: "AI coach", icon: Bot },
+    { to: "/supplements", label: "Supplements", icon: PillIcon },
+    { to: "/water", label: "Water", icon: Droplets },
+    { to: "/check-in", label: "Weekly check-in", icon: ClipboardCheck },
+    { to: "/calendar", label: "History", icon: CalendarDays },
+  ];
+  return (
+    <ul className="divide-y divide-ink-700/70 overflow-hidden rounded-3xl border border-ink-700/80 bg-ink-850">
+      {links.map((l) => (
+        <li key={l.to}>
+          <Link to={l.to} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-ink-800">
+            <l.icon className="h-5 w-5 text-volt-400" />
+            <span className="flex-1 font-semibold">{l.label}</span>
+            <ChevronRight className="h-4 w-4 text-mist-500" />
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -76,7 +101,7 @@ function AccountSection() {
 }
 
 function ProfileSection() {
-  const { saveProfile } = useStore();
+  const { saveProfile, data } = useStore();
   const profile = useProfile();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -96,8 +121,12 @@ function ProfileSection() {
     if (Object.keys(e).length) return;
     setSaving(true);
     try {
-      await saveProfile({ ...profile, ...d, name: d.name.trim(), age: d.age!, heightCm: d.heightCm!, startWeightKg: d.startWeightKg!, targetWeightKg: d.targetWeightKg! });
-      toast.show({ message: "Profile updated" });
+      const goalChanged = simpleGoal(d.goal) !== simpleGoal(profile.goal);
+      const next: Profile = { ...profile, ...d, goal: simpleGoal(d.goal), name: d.name.trim(), age: d.age!, heightCm: d.heightCm!, startWeightKg: d.startWeightKg!, targetWeightKg: effectiveTarget(d)! };
+      // A new goal (e.g. bulk -> cut) needs new calorie targets straight away.
+      if (goalChanged) next.targets = computeTargets(inputsFromProfile(next, currentWeight(data.bodyEntries, next)));
+      await saveProfile(next);
+      toast.show({ message: goalChanged ? "Goal updated and targets recalculated" : "Profile updated" });
       setOpen(false);
     } catch (err) {
       toast.show({ tone: "error", message: `Couldn't save: ${(err as Error).message}` });
@@ -106,37 +135,37 @@ function ProfileSection() {
     }
   }
   const set = (patch: Partial<ProfileDraft>) => setD((x) => ({ ...x, ...patch }));
-  const goalLabel = { lean_bulk: "Lean bulk", bulk: "Standard bulk", gain_weight: "Gain weight", strength: "Get stronger" }[profile.goal];
+  const goal = simpleGoal(profile.goal);
   return (
-    <Section icon={<User className="h-4 w-4" />} title="Profile" action={<Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Edit profile</Button>}>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
-        <Item label="Age" value={`${profile.age}`} />
-        <Item label="Height" value={`${profile.heightCm} cm`} />
-        <Item label="Goal" value={goalLabel} />
-        <Item label="Training" value={`${profile.trainingDays} days/week`} />
-        <Item label="Experience" value={profile.experience} />
-        <Item label="Diet" value={profile.dietaryPreferences.join(", ") || "No preferences set"} />
-        <Item label="Supplements" value={[profile.usesCreatine && "Creatine", profile.usesProteinPowder && "Protein", profile.usesMassGainer && "Gainer"].filter(Boolean).join(", ") || "None"} />
-      </dl>
+    <Card>
+      <div className="flex items-center gap-4">
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-volt-500/15 font-display text-2xl font-bold text-volt-300">{profile.name.slice(0, 1).toUpperCase()}</div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-xl font-semibold">{profile.name}</p>
+          <p className="text-sm text-mist-400">
+            {GOAL_LABEL[goal]}
+            {goal !== "maintain" ? ` to ${profile.targetWeightKg} kg` : ""} · {profile.targets.calories.toLocaleString()} kcal · {profile.targets.protein} g protein
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+          Edit
+        </Button>
+      </div>
       <Sheet open={open} onClose={() => setOpen(false)} title="Edit profile" wide footer={<Button block loading={saving} onClick={save}>Save profile</Button>}>
         <div className="flex flex-col gap-6">
-          <AboutFields d={d} set={set} errors={errors} />
+          <GoalFields d={d} set={set} errors={errors} />
           <BodyFields d={d} set={set} errors={errors} />
-          <TrainingFields d={d} set={set} />
-          <DietFields d={d} set={set} />
-          <p className="text-xs text-mist-500">Changing your body stats or goal doesn't change your targets automatically. Use "Recalculate" under Goals & targets.</p>
+          <TrainingFields d={d} set={set} showActivity />
+          <details className="rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+            <summary className="cursor-pointer text-sm font-semibold text-mist-300">Diet and supplements (optional)</summary>
+            <div className="mt-4">
+              <DietFields d={d} set={set} />
+            </div>
+          </details>
+          <p className="text-xs text-mist-500">Changing your goal recalculates your targets. Other changes keep your current targets; use "Recalculate" under Goals & targets to update them.</p>
         </div>
       </Sheet>
-    </Section>
-  );
-}
-
-function Item({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[11px] font-semibold uppercase tracking-[.08em] text-mist-500">{label}</dt>
-      <dd className="truncate capitalize text-mist-100">{value}</dd>
-    </div>
+    </Card>
   );
 }
 
@@ -178,7 +207,10 @@ function TargetsSection() {
 
   async function save(next: Targets, customised: boolean) {
     const tw = num(targetWeight);
-    if (!tw || tw < 35 || tw > 250) return toast.show({ tone: "error", message: "Enter a target weight between 35 and 250 kg." });
+    if (!tw || tw < 35 || tw > 250) return toast.show({ tone: "error", message: "Enter a goal weight between 35 and 250 kg." });
+    const g = simpleGoal(profile.goal);
+    if (g === "cut" && tw >= weight) return toast.show({ tone: "error", message: "You're cutting, so your goal weight should be below your current weight. To gain instead, change your goal under Edit." });
+    if (g === "bulk" && tw <= weight) return toast.show({ tone: "error", message: "You're bulking, so your goal weight should be above your current weight. To lose instead, change your goal under Edit." });
     if (next.calories < 1200 || next.calories > 7000) return toast.show({ tone: "error", message: "Calorie target should be between 1,200 and 7,000 kcal." });
     if (next.protein < 30 || next.protein > 400) return toast.show({ tone: "error", message: "Protein target should be between 30 and 400 g." });
     await saveProfile({ ...profile, targets: next, targetsCustomised: customised, targetWeightKg: tw });
@@ -189,7 +221,7 @@ function TargetsSection() {
     <Section id="targets" icon={<Target className="h-4 w-4" />} title="Goals & targets" subtitle={`Based on your current weight of ${weight} kg`}>
       <div className="flex flex-col gap-4">
         <PlanSummary inputs={inputs} targetWeightKg={profile.targetWeightKg} weeklyGainKg={profile.targets.weeklyGainKg} />
-        <Input id="st-target-weight" label="Target weight" type="number" inputMode="decimal" step="0.1" suffix="kg" value={targetWeight} onChange={(e) => setTargetWeight(e.target.value)} />
+        <Input id="st-target-weight" label="Goal weight" type="number" inputMode="decimal" step="0.1" suffix="kg" value={targetWeight} onChange={(e) => setTargetWeight(e.target.value)} />
         <TargetsEditor targets={targets} onChange={setTargets} />
         <div className="rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3 text-sm text-mist-400">
           Suggested now: <span className="font-semibold text-mist-100">{suggested.calories.toLocaleString()} kcal</span>, {suggested.protein} g protein, {suggested.carbs} g carbs, {suggested.fat} g fat, {suggested.waterMl} ml water, +{suggested.weeklyGainKg} kg/week.
@@ -382,9 +414,14 @@ function DataSection() {
     setBusy(true);
     try {
       if (auth.mode === "cloud") {
-        const status = await getStatus(true);
-        if (status.accountDeletion) await deleteCloudAccount();
-        else await repo.wipe();
+        // Remove photos and rows, then the login itself.
+        await repo.wipe();
+        const { error } = (await supabase?.rpc("delete_own_account")) ?? { error: null };
+        if (error) {
+          const status = await getStatus(true);
+          if (!status.accountDeletion) throw new Error("Your data was deleted, but the account login couldn't be removed. Please contact support.");
+          await deleteCloudAccount();
+        }
         await signOut();
       } else {
         await repo.wipe();

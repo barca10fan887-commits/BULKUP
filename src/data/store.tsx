@@ -26,6 +26,35 @@ interface StoreValue {
   resetLocalState(): void;
 }
 
+/** Copies on-device data (including photos) into a newly created cloud account. */
+async function importLocalData(cloud: Repository): Promise<boolean> {
+  const local = new LocalRepository("local");
+  let profile: Profile | null = null;
+  try {
+    profile = await local.loadProfile();
+  } catch {
+    return false;
+  }
+  if (!profile) return false;
+  const all = await local.loadAll();
+  for (const c of COLLECTIONS) {
+    if (c === "progressPhotos") continue;
+    const rows = all[c] as Collections[typeof c][];
+    for (let i = 0; i < rows.length; i += 500) await cloud.upsertMany(c, rows.slice(i, i + 500));
+  }
+  const photos = [];
+  for (const ph of all.progressPhotos) {
+    const url = await local.photoUrl(ph.path);
+    if (!url) continue;
+    const blob = await (await fetch(url)).blob();
+    photos.push({ ...ph, path: await cloud.savePhoto(ph.id, blob) });
+  }
+  if (photos.length) await cloud.upsertMany("progressPhotos", photos);
+  await cloud.saveProfile({ ...profile, updatedAt: new Date().toISOString() });
+  await local.wipe();
+  return true;
+}
+
 const emptyData = (): AppData => Object.fromEntries(COLLECTIONS.map((c) => [c, []])) as unknown as AppData;
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -49,7 +78,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (auth.status !== "ready") return;
     setStatus("loading");
     try {
-      const [p, d] = await Promise.all([repo.loadProfile(), repo.loadAll()]);
+      let [p, d] = await Promise.all([repo.loadProfile(), repo.loadAll()]);
+      // First sign-in on a device that was used without an account: bring that data along.
+      if (!p && repo.kind === "cloud") {
+        const moved = await importLocalData(repo);
+        if (moved) {
+          [p, d] = await Promise.all([repo.loadProfile(), repo.loadAll()]);
+          toast.show({ message: "Your existing data has been saved to your account" });
+        }
+      }
       setProfile(p);
       setData(d);
       setStatus("ready");
@@ -58,7 +95,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setError((e as Error).message || "Couldn't load your data.");
       setStatus("error");
     }
-  }, [repo, auth.status]);
+  }, [repo, auth.status, toast]);
 
   useEffect(() => {
     reload();

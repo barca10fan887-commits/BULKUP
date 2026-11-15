@@ -11,7 +11,8 @@ export interface BaseRecord {
 
 export type Sex = "male" | "female" | "unspecified";
 export type Experience = "beginner" | "intermediate" | "advanced";
-export type Goal = "lean_bulk" | "bulk" | "gain_weight" | "strength";
+/** The app offers cut / maintain / bulk. Older profiles may still hold the legacy values. */
+export type Goal = "cut" | "maintain" | "bulk" | "lean_bulk" | "gain_weight" | "strength";
 export type DailyActivity = "sedentary" | "light" | "active";
 export type MealType = "breakfast" | "lunch" | "dinner" | "snacks";
 
@@ -21,7 +22,7 @@ export interface Targets {
   carbs: number;
   fat: number;
   waterMl: number;
-  /** Planned weekly gain in kg. */
+  /** Planned weekly weight change in kg: positive for a bulk, negative for a cut. */
   weeklyGainKg: number;
 }
 

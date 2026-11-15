@@ -173,3 +173,15 @@ export function loggingStreak(entries: FoodEntry[], todayDate: ISODate): number 
   }
   return n;
 }
+
+/** Plain-language status towards the goal weight, for cuts, bulks and maintenance. */
+export function goalStatus(profile: Profile, currentKg: number): { maintaining: boolean; reached: boolean; remainingKg: number; label: string } {
+  const dir = Math.sign(profile.targetWeightKg - profile.startWeightKg);
+  const remaining = round(profile.targetWeightKg - currentKg, 1);
+  if (dir === 0) {
+    const off = round(currentKg - profile.targetWeightKg, 1);
+    return { maintaining: true, reached: Math.abs(off) <= 1, remainingKg: Math.abs(off), label: Math.abs(off) <= 1 ? "Holding steady" : `${Math.abs(off)} kg ${off > 0 ? "above" : "below"} your weight` };
+  }
+  const reached = dir > 0 ? remaining <= 0 : remaining >= 0;
+  return { maintaining: false, reached, remainingKg: Math.abs(remaining), label: reached ? "Goal reached" : `${Math.abs(remaining)} kg to ${dir > 0 ? "gain" : "lose"}` };
+}

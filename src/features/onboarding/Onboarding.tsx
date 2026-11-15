@@ -1,23 +1,22 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown } from "lucide-react";
 import type { Profile, Targets } from "@/lib/types";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/auth/AuthProvider";
-import { computeTargets } from "@/lib/calc";
-import { defaultPrivacy, defaultReminders, starterRoutines, starterSupplements } from "@/lib/templates";
+import { computeTargets, simpleGoal, weeksToTarget } from "@/lib/calc";
+import { defaultPrivacy, defaultReminders, starterRoutines } from "@/lib/templates";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/layout/Logo";
 import { Disclaimer } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/Toast";
-import { AboutFields, BodyFields, DietFields, TrainingFields, validateDraft, type Errors, type ProfileDraft } from "./ProfileFields";
+import { round } from "@/lib/format";
+import { BodyFields, GoalFields, TrainingFields, effectiveTarget, validateDraft, type Errors, type ProfileDraft } from "./ProfileFields";
 import { PlanSummary, TARGETS_DISCLAIMER, TargetsEditor } from "./TargetsEditor";
 
 const STEPS = [
-  { key: "about", title: "Let's get to know you", sub: "This personalises your targets and coaching." },
-  { key: "body", title: "Where you are now", sub: "Your starting point and where you want to be." },
-  { key: "training", title: "How you train", sub: "Used for your calorie estimate and starter routines." },
-  { key: "diet", title: "Food and supplements", sub: "So suggestions fit how you eat." },
-  { key: "plan", title: "Your starting plan", sub: "Adjust anything. You can change it later in Settings." },
+  { key: "goal", title: "Welcome to BULKUP", sub: "Three quick steps and you're in." },
+  { key: "body", title: "About you", sub: "Used to work out your calories." },
+  { key: "plan", title: "Your plan", sub: "You can change any of this later." },
 ] as const;
 
 export default function Onboarding() {
@@ -27,11 +26,13 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<Errors>({});
   const [saving, setSaving] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [custom, setCustom] = useState<Targets | null>(null);
   const [d, setD] = useState<ProfileDraft>({
     name: "",
     sex: "unspecified",
     experience: "beginner",
-    trainingDays: 4,
+    trainingDays: 3,
     goal: "bulk",
     dailyActivity: "light",
     dietaryPreferences: [],
@@ -40,8 +41,12 @@ export default function Onboarding() {
     usesProteinPowder: false,
     usesMassGainer: false,
   });
-  const set = (patch: Partial<ProfileDraft>) => setD((x) => ({ ...x, ...patch }));
+  const set = (patch: Partial<ProfileDraft>) => {
+    setD((x) => ({ ...x, ...patch }));
+    setCustom(null); // inputs changed, so recompute targets
+  };
 
+  const target = effectiveTarget(d);
   const inputs = useMemo(
     () =>
       d.age && d.heightCm && d.startWeightKg
@@ -50,26 +55,24 @@ export default function Onboarding() {
     [d],
   );
   const computed = useMemo(() => (inputs ? computeTargets(inputs) : null), [inputs]);
-  const [targets, setTargets] = useState<Targets | null>(null);
-  const [customised, setCustomised] = useState(false);
+  const targets = custom ?? computed;
 
   function next() {
     const key = STEPS[step].key;
-    if (key === "about" || key === "body") {
+    if (key !== "plan") {
       const e = validateDraft(d, key);
       setErrors(e);
       if (Object.keys(e).length) return;
     }
-    if (STEPS[step + 1]?.key === "plan" && computed && !customised) setTargets(computed);
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
     window.scrollTo({ top: 0 });
   }
 
   async function finish() {
     const e = validateDraft(d, "all");
-    if (Object.keys(e).length || !targets) {
+    if (Object.keys(e).length || !targets || target == null) {
       setErrors(e);
-      setStep(Object.keys(e).some((k) => k === "name" || k === "age") ? 0 : 1);
+      setStep(e.name ? 0 : 1);
       return;
     }
     setSaving(true);
@@ -81,18 +84,18 @@ export default function Onboarding() {
       sex: d.sex,
       heightCm: d.heightCm!,
       startWeightKg: d.startWeightKg!,
-      targetWeightKg: d.targetWeightKg!,
+      targetWeightKg: target,
       experience: d.experience,
       trainingDays: d.trainingDays,
-      goal: d.goal,
+      goal: simpleGoal(d.goal),
       dailyActivity: d.dailyActivity,
-      dietaryPreferences: d.dietaryPreferences,
-      dietNotes: d.dietNotes.trim(),
-      usesCreatine: d.usesCreatine,
-      usesProteinPowder: d.usesProteinPowder,
-      usesMassGainer: d.usesMassGainer,
+      dietaryPreferences: [],
+      dietNotes: "",
+      usesCreatine: false,
+      usesProteinPowder: false,
+      usesMassGainer: false,
       targets,
-      targetsCustomised: customised,
+      targetsCustomised: !!custom,
       reminders: defaultReminders(),
       privacy: defaultPrivacy(),
       onboardedAt: now,
@@ -100,10 +103,9 @@ export default function Onboarding() {
     };
     try {
       addMany("routines", starterRoutines(d.trainingDays));
-      addMany("supplements", starterSupplements({ creatine: d.usesCreatine, protein: d.usesProteinPowder, gainer: d.usesMassGainer }));
       addMany("bodyEntries", [{ date: now.slice(0, 10), weightKg: d.startWeightKg!, custom: {}, note: "Starting weight" }]);
       await saveProfile(profile);
-      toast.show({ message: `Welcome to BULKUP, ${profile.name}` });
+      toast.show({ message: `Welcome, ${profile.name}` });
     } catch (err) {
       toast.show({ tone: "error", message: `Couldn't save your profile: ${(err as Error).message}` });
       setSaving(false);
@@ -111,12 +113,15 @@ export default function Onboarding() {
   }
 
   const s = STEPS[step];
+  const weeks = targets && inputs && target != null ? weeksToTarget(inputs.weightKg, target, targets.weeklyGainKg) : null;
+  const g = simpleGoal(d.goal);
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col py-6" style={{ paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: "max(16px, env(safe-area-inset-right, 0px))" }}>
       <div className="flex items-center justify-between">
         <Logo small />
         <span className="text-xs font-semibold tabular-nums text-mist-500">
-          Step {step + 1} of {STEPS.length}
+          {step + 1} / {STEPS.length}
         </span>
       </div>
       <div className="mt-4 flex gap-1.5" aria-hidden>
@@ -129,30 +134,38 @@ export default function Onboarding() {
         <h1 className="font-display text-[28px] font-bold leading-tight tracking-tight">{s.title}</h1>
         <p className="mt-1.5 text-mist-400">{s.sub}</p>
         <div className="mt-7">
-          {s.key === "about" && <AboutFields d={d} set={set} errors={errors} />}
+          {s.key === "goal" && <GoalFields d={d} set={set} errors={errors} />}
           {s.key === "body" && <BodyFields d={d} set={set} errors={errors} />}
-          {s.key === "training" && <TrainingFields d={d} set={set} />}
-          {s.key === "diet" && <DietFields d={d} set={set} />}
           {s.key === "plan" && inputs && targets && (
-            <div className="flex flex-col gap-5">
-              <PlanSummary inputs={inputs} targetWeightKg={d.targetWeightKg!} weeklyGainKg={targets.weeklyGainKg} />
-              <TargetsEditor
-                targets={targets}
-                onChange={(t) => {
-                  setTargets(t);
-                  setCustomised(true);
-                }}
-              />
-              {customised && computed && (
-                <button
-                  className="self-start text-sm font-semibold text-volt-400"
-                  onClick={() => {
-                    setTargets(computed);
-                    setCustomised(false);
-                  }}
-                >
-                  Reset to suggested targets
-                </button>
+            <div className="flex flex-col gap-6">
+              <TrainingFields d={d} set={set} />
+              <div className="rounded-3xl border border-volt-500/40 bg-volt-500/[.07] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[.1em] text-volt-300">Your daily target</p>
+                <p className="mt-1 font-display text-4xl font-bold tabular-nums">
+                  {targets.calories.toLocaleString()} <span className="text-lg font-semibold text-mist-400">kcal</span>
+                </p>
+                <p className="mt-1 text-mist-300">
+                  <span className="font-semibold text-mist-100">{targets.protein} g protein</span> · {targets.carbs} g carbs · {targets.fat} g fat
+                </p>
+                <p className="mt-3 text-sm text-mist-400">
+                  {g === "maintain"
+                    ? `Aim to stay around ${target} kg.`
+                    : `Aim for ${targets.weeklyGainKg > 0 ? "+" : ""}${round(targets.weeklyGainKg, 2)} kg a week${weeks ? `, reaching ${target} kg in about ${weeks} weeks` : ""}.`}
+                </p>
+              </div>
+              <button className="inline-flex items-center gap-1.5 self-start text-sm font-semibold text-volt-400" onClick={() => setShowAdjust((v) => !v)} aria-expanded={showAdjust}>
+                Adjust targets <ChevronDown className={`h-4 w-4 transition ${showAdjust ? "rotate-180" : ""}`} />
+              </button>
+              {showAdjust && (
+                <div className="flex flex-col gap-4">
+                  <PlanSummary inputs={inputs} targetWeightKg={target!} weeklyGainKg={targets.weeklyGainKg} showBmi={false} />
+                  <TargetsEditor targets={targets} onChange={setCustom} />
+                  {custom && (
+                    <button className="self-start text-sm font-semibold text-volt-400" onClick={() => setCustom(null)}>
+                      Reset to suggested targets
+                    </button>
+                  )}
+                </div>
               )}
               <Disclaimer>{TARGETS_DISCLAIMER}</Disclaimer>
             </div>
@@ -168,7 +181,7 @@ export default function Onboarding() {
         )}
         {s.key === "plan" ? (
           <Button size="lg" block onClick={finish} loading={saving}>
-            Start bulking
+            Let's go
           </Button>
         ) : (
           <Button size="lg" block onClick={next}>

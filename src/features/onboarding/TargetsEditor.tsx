@@ -1,5 +1,5 @@
 import type { Targets } from "@/lib/types";
-import { bmi, bmiCategory, maintenanceCalories, suggestedSurplus, weeksToTarget, type BodyInputs } from "@/lib/calc";
+import { bmi, bmiCategory, calorieAdjustment, maintenanceCalories, weeksToTarget, type BodyInputs } from "@/lib/calc";
 import { Input, num } from "@/components/ui/Field";
 import { Disclaimer, Stat } from "@/components/ui/misc";
 import { round } from "@/lib/format";
@@ -9,14 +9,14 @@ export const TARGETS_DISCLAIMER =
 
 export function PlanSummary({ inputs, targetWeightKg, weeklyGainKg, showBmi = true }: { inputs: BodyInputs; targetWeightKg: number; weeklyGainKg: number; showBmi?: boolean }) {
   const maint = Math.round(maintenanceCalories(inputs) / 10) * 10;
-  const surplus = suggestedSurplus(inputs.goal, inputs.experience);
+  const adj = calorieAdjustment(inputs.goal, inputs.experience);
   const b = bmi(inputs.weightKg, inputs.heightCm);
   const weeks = weeksToTarget(inputs.weightKg, targetWeightKg, weeklyGainKg);
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-4 sm:grid-cols-4">
       <Stat label="Maintenance" value={`${maint.toLocaleString()}`} sub="kcal / day (est.)" />
-      <Stat label="Suggested surplus" value={`+${surplus}`} sub="kcal / day" />
-      <Stat label="Rate of gain" value={`+${round(weeklyGainKg, 2)}`} sub={weeks ? `kg / week · ~${weeks} weeks to target` : "kg / week"} />
+      <Stat label={adj < 0 ? "Deficit" : adj > 0 ? "Surplus" : "Adjustment"} value={adj === 0 ? "0" : `${adj > 0 ? "+" : ""}${adj}`} sub="kcal / day" />
+      <Stat label="Weekly change" value={weeklyGainKg === 0 ? "0" : `${weeklyGainKg > 0 ? "+" : ""}${round(weeklyGainKg, 2)}`} sub={weeks ? `kg / week · ~${weeks} weeks to goal` : "kg / week"} />
       {showBmi && <Stat label="BMI (optional)" value={round(b, 1).toFixed(1)} sub={bmiCategory(b)} />}
     </div>
   );
@@ -37,7 +37,7 @@ export function TargetsEditor({ targets, onChange }: { targets: Targets; onChang
         <Input id="t-carbs" label="Carbohydrates" type="number" inputMode="numeric" value={targets.carbs || ""} onChange={(e) => set("carbs", e.target.value)} suffix="g" />
         <Input id="t-fat" label="Fat" type="number" inputMode="numeric" value={targets.fat || ""} onChange={(e) => set("fat", e.target.value)} suffix="g" />
         <Input id="t-water" label="Water" type="number" inputMode="numeric" step="250" value={targets.waterMl || ""} onChange={(e) => set("waterMl", e.target.value)} suffix="ml" />
-        <Input id="t-gain" label="Planned gain" type="number" inputMode="decimal" step="0.05" value={targets.weeklyGainKg || ""} onChange={(e) => set("weeklyGainKg", e.target.value)} suffix="kg/wk" />
+        <Input id="t-gain" label="Weekly change" type="number" inputMode="decimal" step="0.05" hint="Negative to lose weight" value={targets.weeklyGainKg === 0 ? "0" : targets.weeklyGainKg || ""} onChange={(e) => set("weeklyGainKg", e.target.value)} suffix="kg/wk" />
       </div>
       {Math.abs(gap) > 60 && (
         <p className="text-xs text-warn">
