@@ -38,6 +38,7 @@ export default function SettingsPage() {
       <PrivacySection />
       <DataSection />
       <Disclaimer>{TARGETS_DISCLAIMER}</Disclaimer>
+      <p className="text-center text-xs text-mist-500">BULKUP version {__BUILD_ID__}</p>
     </div>
   );
 }
@@ -361,7 +362,7 @@ function PrivacySection() {
         <Toggle label="Blur progress photo thumbnails" description="Thumbnails stay blurred until you tap or hover." checked={p.blurPhotos} onChange={(v) => saveProfile({ ...profile, privacy: { ...p, blurPhotos: v } })} />
         <div className="pt-3 text-sm text-mist-400">
           AI service status:{" "}
-          {status == null ? "checking…" : status.ai ? <Pill tone="good">Available</Pill> : <Pill tone="warn">Not configured</Pill>}
+          {status == null ? "checking…" : status.ai ? <Pill tone="good">On ({status.provider === "gemini" ? "Gemini" : "Claude"})</Pill> : <Pill tone="warn">Not set up yet</Pill>}
         </div>
         {status?.auth === "access_code" && (
           <form

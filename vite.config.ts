@@ -10,8 +10,11 @@ const base = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
 // Native (Capacitor) builds don't use a service worker.
 const native = process.env.BUILD_TARGET === "native";
 
+const buildId = new Date().toISOString().slice(0, 16).replace("T", " ");
+
 export default defineConfig({
   base,
+  define: { __BUILD_ID__: JSON.stringify(buildId) },
   resolve: {
     alias: {
       "@": path.resolve(here, "src"),
@@ -45,6 +48,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         navigateFallback: `${base}index.html`,
         importScripts: ["sw-notify.js"],
         navigateFallbackDenylist: [/\/api\//, /\/privacy\.html$/],
