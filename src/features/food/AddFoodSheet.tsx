@@ -5,6 +5,7 @@ import { useStore } from "@/data/store";
 import { searchBuiltin, type FoodItem } from "@/lib/foodDb";
 import { searchProducts, OffError } from "@/lib/openFoodFacts";
 import { config } from "@/lib/config";
+import { getStatus } from "@/lib/api";
 import { Sheet } from "@/components/ui/Sheet";
 import { Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -29,6 +30,13 @@ const TABS: { value: AddMode; label: string; icon: typeof Search }[] = [
 
 export function AddFoodSheet({ open, onClose, date, meal, mode: initialMode }: { open: boolean; onClose(): void; date: ISODate; meal: MealType; mode: AddMode }) {
   const [mode, setMode] = useState<AddMode>(initialMode);
+  // The photo scanner needs an AI service; hide it entirely when there isn't one.
+  const [aiOn, setAiOn] = useState(false);
+  useEffect(() => {
+    getStatus().then((st) => setAiOn(st.ai));
+  }, []);
+  const tabs = TABS.filter((t) => t.value !== "photo" || aiOn);
+  const activeMode: AddMode = mode === "photo" && !aiOn ? "search" : mode;
   const [manualBarcode, setManualBarcode] = useState<string | undefined>();
   const { addMany, add, remove, data } = useStore();
   const toast = useToast();
@@ -68,15 +76,15 @@ export function AddFoodSheet({ open, onClose, date, meal, mode: initialMode }: {
   return (
     <Sheet open={open} onClose={onClose} title={`Add to ${MEAL_LABEL[meal].toLowerCase()}`} wide>
       <div className="-mx-1 mb-4 flex gap-1 overflow-x-auto px-1 pb-1" role="tablist">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.value}
             role="tab"
-            aria-selected={mode === t.value}
+            aria-selected={activeMode === t.value}
             onClick={() => setMode(t.value)}
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition",
-              mode === t.value ? "bg-volt-500 text-white shadow-glow" : "bg-ink-900 text-mist-400 hover:text-mist-100",
+              activeMode === t.value ? "bg-volt-500 text-white shadow-glow" : "bg-ink-900 text-mist-400 hover:text-mist-100",
             )}
           >
             <t.icon className="h-4 w-4" />
@@ -84,8 +92,8 @@ export function AddFoodSheet({ open, onClose, date, meal, mode: initialMode }: {
           </button>
         ))}
       </div>
-      {mode === "search" && <FoodSearch meal={meal} onAdd={(p, src) => addEntries([p], src)} onManual={() => setMode("manual")} />}
-      {mode === "barcode" && (
+      {activeMode === "search" && <FoodSearch meal={meal} onAdd={(p, src) => addEntries([p], src)} onManual={() => setMode("manual")} />}
+      {activeMode === "barcode" && (
         <BarcodeScanner
           meal={meal}
           onAdd={(p) => addEntries([p], "barcode")}
@@ -95,14 +103,14 @@ export function AddFoodSheet({ open, onClose, date, meal, mode: initialMode }: {
           }}
         />
       )}
-      {mode === "photo" && <PhotoScanner meal={meal} onAddMany={(items) => addEntries(items, "photo_ai")} onManual={() => setMode("manual")} />}
-      {mode === "manual" && (
+      {activeMode === "photo" && <PhotoScanner meal={meal} onAddMany={(items) => addEntries(items, "photo_ai")} onManual={() => setMode("manual")} />}
+      {activeMode === "manual" && (
         <>
           {manualBarcode && <p className="mb-3 rounded-xl bg-ink-900 px-3 py-2 text-xs text-mist-400">Barcode {manualBarcode} will be saved with this food so it's found next time.</p>}
           <ManualFoodForm meal={meal} onSubmit={addManual} />
         </>
       )}
-      {mode === "favourites" && (
+      {activeMode === "favourites" && (
         <div className="flex flex-col gap-2">
           {data.favouriteMeals.length === 0 ? (
             <EmptyState icon={<Star className="h-5 w-5" />} title="No saved meals yet" body="In your diary, open a meal's menu and choose 'Save as favourite' to reuse it in one tap." />
