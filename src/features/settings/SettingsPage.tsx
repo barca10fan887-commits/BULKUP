@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Bell, Bot, CalendarDays, ChevronRight, ClipboardCheck, Database, Download, Droplets, LogOut, Pill as PillIcon, RefreshCw, Shield, Target, Trash2, User } from "lucide-react";
+import { Bell, Bot, LineChart, CalendarDays, ChevronRight, ClipboardCheck, Database, Download, Droplets, LogOut, Pill as PillIcon, RefreshCw, Shield, Target, Trash2, User } from "lucide-react";
 import type { Profile, ReminderPrefs, Targets } from "@/lib/types";
 import { useProfile, useStore } from "@/data/store";
 import { useAuth } from "@/auth/AuthProvider";
@@ -29,7 +29,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Me" />
+      <PageHeader title="Profile" />
       <ProfileSection />
       <QuickLinks />
       <AccountSection />
@@ -54,7 +54,8 @@ function Section({ id, icon, title, subtitle, children, action }: { id?: string;
 
 function QuickLinks() {
   const links = [
-    { to: "/coach", label: "AI coach", icon: Bot },
+    { to: "/progress", label: "Progress", icon: LineChart },
+    { to: "/coach", label: "Coach", icon: Bot },
     { to: "/supplements", label: "Supplements", icon: PillIcon },
     { to: "/water", label: "Water", icon: Droplets },
     { to: "/check-in", label: "Weekly check-in", icon: ClipboardCheck },

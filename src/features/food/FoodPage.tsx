@@ -8,7 +8,7 @@ import { dailyTotals, entriesOn } from "@/lib/stats";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/Progress";
-import { EmptyState, PageHeader, Segmented } from "@/components/ui/misc";
+import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { Sheet } from "@/components/ui/Sheet";
 import { Input, Select, num } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
@@ -19,7 +19,7 @@ import { MEALS, MEAL_LABEL, defaultMeal, fmt1 } from "./shared";
 export default function FoodPage() {
   const [params, setParams] = useSearchParams();
   const [date, setDate] = useState(today());
-  const [tab, setTab] = useState<"diary" | "foods" | "saved">("diary");
+  const [library, setLibrary] = useState(false);
   const [sheet, setSheet] = useState<{ open: boolean; meal: MealType; mode: AddMode }>({ open: false, meal: defaultMeal(), mode: "search" });
 
   // Deep links from the dashboard quick actions: /food?add=barcode
@@ -36,26 +36,28 @@ export default function FoodPage() {
     <div>
       <PageHeader
         title="Food"
-        subtitle="Your food diary and saved foods"
         action={
           <Button onClick={() => setSheet({ open: true, meal: defaultMeal(), mode: "search" })}>
             <Plus className="h-4 w-4" /> Add food
           </Button>
         }
       />
-      <Segmented
-        className="mb-4 max-w-md"
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: "diary", label: "Diary" },
-          { value: "foods", label: "My foods" },
-          { value: "saved", label: "Saved meals" },
-        ]}
-      />
-      {tab === "diary" && <Diary date={date} setDate={setDate} onAdd={(meal) => setSheet({ open: true, meal, mode: "search" })} />}
-      {tab === "foods" && <MyFoods />}
-      {tab === "saved" && <SavedMeals />}
+      <Diary date={date} setDate={setDate} onAdd={(meal) => setSheet({ open: true, meal, mode: "search" })} />
+      <button onClick={() => setLibrary(true)} className="mx-auto mt-6 block text-sm font-semibold text-volt-400">
+        My foods and saved meals
+      </button>
+      <Sheet open={library} onClose={() => setLibrary(false)} title="My foods and saved meals" wide>
+        <div className="flex flex-col gap-6">
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-mist-300">Saved meals</h3>
+            <SavedMeals />
+          </section>
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-mist-300">My foods</h3>
+            <MyFoods />
+          </section>
+        </div>
+      </Sheet>
       <AddFoodSheet open={sheet.open} onClose={() => setSheet((s) => ({ ...s, open: false }))} date={date} meal={sheet.meal} mode={sheet.mode} />
     </div>
   );

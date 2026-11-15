@@ -1,22 +1,24 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
-import { LayoutDashboard, UtensilsCrossed, Dumbbell, LineChart, CircleUser } from "lucide-react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { House, UtensilsCrossed, Dumbbell, ChevronLeft } from "lucide-react";
 import { cn } from "@/components/ui/cn";
 import { Logo } from "./Logo";
 import { useStore } from "@/data/store";
 
-// Five destinations only. Everything else (coach, supplements, water, history,
-// check-ins) is reached from Home or Me.
+// Three tabs. Progress opens from Home; profile and settings from the avatar
+// at the top of every screen; everything else from the profile page.
 const NAV = [
-  { to: "/", label: "Home", icon: LayoutDashboard },
+  { to: "/", label: "Home", icon: House },
   { to: "/food", label: "Food", icon: UtensilsCrossed },
   { to: "/workouts", label: "Train", icon: Dumbbell },
-  { to: "/progress", label: "Progress", icon: LineChart },
-  { to: "/settings", label: "Me", icon: CircleUser },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, repo } = useStore();
+  const loc = useLocation();
+  const navigate = useNavigate();
+  const isTab = NAV.some((n) => n.to === loc.pathname);
+  const goBack = () => (window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate("/"));
 
   return (
     <div className="min-h-dvh bg-ink-950 lg:flex">
@@ -31,13 +33,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         {profile && (
-          <div className="flex items-center gap-3 rounded-2xl border border-ink-700 bg-ink-850 p-3">
+          <Link to="/settings" className="flex items-center gap-3 rounded-2xl border border-ink-700 bg-ink-850 p-3 transition hover:border-ink-600">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-volt-500/15 font-display font-bold text-volt-300">{profile.name.slice(0, 1).toUpperCase()}</div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-mist-100">{profile.name}</p>
-              <p className="text-xs text-mist-500">{repo.kind === "cloud" ? "Synced account" : "Saved on this device"}</p>
+              <p className="text-xs text-mist-500">{repo.kind === "cloud" ? "Profile and settings" : "Saved on this device"}</p>
             </div>
-          </div>
+          </Link>
         )}
       </aside>
 
@@ -46,8 +48,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="mx-auto w-full max-w-5xl pb-28 pt-4 lg:pb-12 lg:pt-8"
           style={{ paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: "max(16px, env(safe-area-inset-right, 0px))" }}
         >
-          <div className="mb-4 lg:hidden">
-            <Logo small />
+          <div className="mb-4 flex items-center justify-between lg:hidden">
+            {isTab ? (
+              <Logo small />
+            ) : (
+              <button onClick={goBack} className="-ml-2 inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-[15px] font-semibold text-volt-400">
+                <ChevronLeft className="h-5 w-5" /> Back
+              </button>
+            )}
+            {profile && (
+              <Link to="/settings" aria-label="Profile and settings" className="grid h-9 w-9 place-items-center rounded-full bg-ink-800 text-sm font-semibold text-mist-100">
+                {profile.name.slice(0, 1).toUpperCase()}
+              </Link>
+            )}
           </div>
           {children}
         </div>
@@ -59,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-800 bg-ink-950/90 backdrop-blur-xl lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}
       >
-        <div className="mx-auto grid max-w-lg grid-cols-5">
+        <div className="mx-auto grid max-w-md grid-cols-3">
           {NAV.map((n) => (
             <BottomLink key={n.to} to={n.to} label={n.label} icon={n.icon} />
           ))}
@@ -87,7 +100,7 @@ function SideLink({ to, icon, label }: { to: string; icon: ReactNode; label: str
   );
 }
 
-function BottomLink({ to, label, icon: Icon }: { to: string; label: string; icon: typeof LayoutDashboard }) {
+function BottomLink({ to, label, icon: Icon }: { to: string; label: string; icon: typeof House }) {
   return (
     <NavLink to={to} end={to === "/"} className={({ isActive }) => cn("relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition", isActive ? "text-volt-400" : "text-mist-500")}>
       {({ isActive }) => (

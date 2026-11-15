@@ -15,7 +15,7 @@ export default function ProgressPage() {
         onChange={setTab}
         options={[
           { value: "weight", label: "Weight" },
-          { value: "measurements", label: "Measurements" },
+          { value: "measurements", label: "Body" },
           { value: "photos", label: "Photos" },
         ]}
       />

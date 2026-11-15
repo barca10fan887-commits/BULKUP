@@ -9,7 +9,6 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState, PageHeader, Pill, Segmented } from "@/components/ui/misc";
 import { Sheet } from "@/components/ui/Sheet";
-import { MonthCalendar, Dot } from "@/components/MonthCalendar";
 import { cn } from "@/components/ui/cn";
 import { RoutineEditor } from "./RoutineEditor";
 import { PlanBuilder } from "./PlanBuilder";
@@ -18,7 +17,7 @@ import { uid } from "@/lib/id";
 
 export default function WorkoutsPage() {
   const { data, add } = useStore();
-  const [tab, setTab] = useState<"plan" | "history" | "records" | "calendar">("plan");
+  const [tab, setTab] = useState<"plan" | "history">("plan");
   const [editing, setEditing] = useState<{ open: boolean; routine: Routine | null }>({ open: false, routine: null });
   const [builder, setBuilder] = useState(false);
   const active = data.workoutSessions.find((s) => !s.finishedAt);
@@ -60,16 +59,20 @@ export default function WorkoutsPage() {
         value={tab}
         onChange={setTab}
         options={[
-          { value: "plan", label: "Plan" },
+          { value: "plan", label: "My plan" },
           { value: "history", label: "History" },
-          { value: "records", label: "Records" },
-          { value: "calendar", label: "Calendar" },
         ]}
       />
       {tab === "plan" && <Plan onStart={start} onEdit={(r) => setEditing({ open: true, routine: r })} onBuild={() => setBuilder(true)} onAdd={() => setEditing({ open: true, routine: null })} />}
-      {tab === "history" && <HistoryList />}
-      {tab === "records" && <Records />}
-      {tab === "calendar" && <WorkoutCalendar />}
+      {tab === "history" && (
+        <div className="flex flex-col gap-6">
+          <HistoryList />
+          <section>
+            <h2 className="mb-2 text-sm font-semibold text-mist-300">Personal records</h2>
+            <Records />
+          </section>
+        </div>
+      )}
       <PlanBuilder open={builder} onClose={() => setBuilder(false)} />
       <RoutineEditor open={editing.open} routine={editing.routine} onClose={() => setEditing({ open: false, routine: null })} />
     </div>
@@ -277,56 +280,6 @@ function Records() {
         </tbody>
       </table>
       <p className="px-4 py-3 text-xs text-mist-500">Estimated 1RM uses the Epley formula and is a guide only.</p>
-    </div>
-  );
-}
-
-function WorkoutCalendar() {
-  const { data } = useStore();
-  const [sel, setSel] = useState(today());
-  const done = completedSessions(data.workoutSessions);
-  const doneOn = (d: string) => done.filter((s) => s.date === d);
-  const selSessions = doneOn(sel);
-  const selPlanned = isScheduled(data.routines, sel);
-  return (
-    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-      <Card>
-        <MonthCalendar
-          selected={sel}
-          onSelect={setSel}
-          renderDay={(d) => (
-            <>
-              {doneOn(d).length > 0 && <Dot className="bg-good" />}
-              {isScheduled(data.routines, d).length > 0 && d >= today() && <Dot className="bg-volt-400" />}
-            </>
-          )}
-        />
-        <div className="mt-3 flex gap-4 text-xs text-mist-400">
-          <span className="inline-flex items-center gap-1.5">
-            <Dot className="bg-good" /> Completed
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Dot className="bg-volt-400" /> Scheduled
-          </span>
-        </div>
-      </Card>
-      <Card>
-        <CardHeader title={friendlyDay(sel)} />
-        {selSessions.length ? (
-          selSessions.map((s) => (
-            <div key={s.id} className="mb-2 rounded-2xl border border-good/30 bg-good/[.06] px-3 py-2">
-              <p className="font-semibold">{s.name}</p>
-              <p className="text-xs text-mist-400">
-                {s.durationMin} min · {round(sessionVolume(s)).toLocaleString()} kg volume
-              </p>
-            </div>
-          ))
-        ) : selPlanned.length ? (
-          <p className="text-sm text-mist-300">Scheduled: {selPlanned.map((r) => r.name).join(", ")}</p>
-        ) : (
-          <p className="text-sm text-mist-500">No training on this day.</p>
-        )}
-      </Card>
     </div>
   );
 }
