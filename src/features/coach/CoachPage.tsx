@@ -22,6 +22,17 @@ const SUGGESTIONS = [
   "I have no motivation today",
 ];
 
+const BASIC_SUGGESTIONS = [
+  "How many calories do I have left?",
+  "Give me a dinner recipe",
+  "High-protein snack",
+  "Am I on track?",
+  "What should my next workout be?",
+  "Is creatine worth it?",
+  "How do I sleep better?",
+  "Eating out tips",
+];
+
 export default function CoachPage() {
   const { data, add, remove } = useStore();
   const profile = useProfile();
@@ -55,7 +66,8 @@ export default function CoachPage() {
     if (!retry) add("coachMessages", { role: "user", content: q });
 
     if (mode === "basic") {
-      add("coachMessages", { role: "assistant", content: basicCoachReply(q, data, profile, today()), source: "basic" });
+      const history = messages.filter((m) => m.role === "user").map((m) => m.content);
+      add("coachMessages", { role: "assistant", content: basicCoachReply(q, data, profile, today(), history), source: "basic" });
       return;
     }
 
@@ -135,7 +147,7 @@ export default function CoachPage() {
       {status && !status.ai && (
         <div className="mb-4 flex items-start gap-3 rounded-2xl border border-ink-700 bg-ink-850 px-4 py-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-mist-400" />
-          <p className="text-mist-300">The AI coach isn't switched on yet, so you'll get simple answers based on your logged data.</p>
+          <p className="text-mist-300">This is BULKUP's built-in coach. It answers common questions about food, training and progress using your logged data. Try one of the suggestions below.</p>
         </div>
       )}
 
@@ -166,7 +178,7 @@ export default function CoachPage() {
       <div className="sticky bottom-0 -mb-28 mt-4 bg-ink-950 pb-[calc(env(safe-area-inset-bottom,0px)+84px)] pt-3 lg:-mb-12 lg:pb-4">
         <div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-ink-950 to-transparent" />
         <div className="-mx-1 mb-2 flex gap-2 overflow-x-auto px-1 pb-1">
-          {SUGGESTIONS.map((s) => (
+          {(mode === "ai" ? SUGGESTIONS : BASIC_SUGGESTIONS).map((s) => (
             <button key={s} disabled={streaming !== null} onClick={() => ask(s)} className="shrink-0 rounded-full border border-ink-600 bg-ink-900 px-3.5 py-1.5 text-xs font-medium text-mist-300 transition hover:border-volt-500/50 hover:text-mist-100 disabled:opacity-50">
               {s}
             </button>
@@ -216,7 +228,7 @@ function Bubble({ role, text, source, live }: { role: "user" | "assistant"; text
         {isUser ? <p className="whitespace-pre-wrap">{text}</p> : <RichText text={text} />}
         {!isUser && source === "basic" && (
           <div className="mt-2">
-            <Pill>Basic coach</Pill>
+            <Pill>Built-in coach</Pill>
           </div>
         )}
       </div>

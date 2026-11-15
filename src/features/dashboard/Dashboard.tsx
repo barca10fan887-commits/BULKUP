@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getStatus } from "@/lib/api";
 import { Link } from "react-router-dom";
 import { Barcode, Bot, Camera, Check, CheckCircle2, ChevronRight, Dumbbell, Pill as PillIcon, Plus, Scale } from "lucide-react";
 import { useProfile, useStore } from "@/data/store";
@@ -35,6 +36,10 @@ export default function Dashboard() {
   const proLeft = Math.round(t.protein - totals.protein);
   const goal = simpleGoal(profile.goal);
   const over = calLeft < 0;
+  const [aiOn, setAiOn] = useState(false);
+  useEffect(() => {
+    getStatus().then((st) => setAiOn(st.ai));
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -78,10 +83,10 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className={cn("mt-4 grid gap-2", aiOn ? "grid-cols-3" : "grid-cols-2")}>
           <QuickAction to="/food?add=search" icon={<Plus className="h-5 w-5" />} label="Log food" primary />
-          <QuickAction to="/food?add=barcode" icon={<Barcode className="h-5 w-5" />} label="Scan" />
-          <QuickAction to="/food?add=photo" icon={<Camera className="h-5 w-5" />} label="Photo" />
+          <QuickAction to="/food?add=barcode" icon={<Barcode className="h-5 w-5" />} label="Scan barcode" />
+          {aiOn && <QuickAction to="/food?add=photo" icon={<Camera className="h-5 w-5" />} label="Photo" />}
         </div>
       </Card>
 

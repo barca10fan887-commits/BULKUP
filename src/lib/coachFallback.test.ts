@@ -39,3 +39,48 @@ describe("basic coach", () => {
     expect(review).toContain("3150 kcal");
   });
 });
+
+describe("built-in coach topics", () => {
+  const date = "2026-11-15";
+  const ask = (q: string, profile = profileFixture(), history: string[] = []) => basicCoachReply(q, emptyData(), profile, date, history, 18);
+
+  it("recognises lots of everyday questions", () => {
+    const cases: [string, string][] = [
+      ["Give me a dinner recipe", "recipe"],
+      ["Is creatine worth it?", "supplement"],
+      ["How do I sleep better?", "sleep"],
+      ["I'm so sore after legs", "recovery"],
+      ["I have no motivation today", "motivation"],
+      ["squat form tips", "form"],
+      ["Eating out tips", "eatingOut"],
+      ["my knee hurts when I squat", "pain"],
+      ["I can't eat enough", "appetite"],
+      ["Is cardio bad for gains?", "cardio"],
+      ["how do I get abs", "fatLoss"],
+      ["thanks!", "thanks"],
+      ["cheap foods for bulking", "budget"],
+    ];
+    for (const [q, intent] of cases) expect(detectIntent(q), q).toBe(intent);
+  });
+
+  it("gives a recipe and a different one when asked for another", () => {
+    const first = ask("Give me a dinner recipe");
+    const second = ask("another one", profileFixture(), ["Give me a dinner recipe"]);
+    expect(first).toMatch(/kcal/);
+    expect(second).toMatch(/kcal/);
+    expect(first.split("\n")[2]).not.toBe(second.split("\n")[2]);
+  });
+
+  it("only suggests vegan recipes to vegans", () => {
+    const reply = ask("Give me a dinner recipe", profileFixture({ dietaryPreferences: ["Vegan"] }));
+    expect(reply).toMatch(/Lentil and chickpea curry/);
+  });
+
+  it("refers pain to a professional", () => {
+    expect(ask("my shoulder hurts")).toMatch(/doctor or physio/);
+  });
+
+  it("gives specific form tips", () => {
+    expect(ask("deadlift form")).toMatch(/Bar over mid-foot/);
+  });
+});

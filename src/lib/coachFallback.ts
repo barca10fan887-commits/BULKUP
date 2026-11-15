@@ -1,11 +1,13 @@
-// Rule-based coach used when the AI service is not configured or unreachable.
-// It answers common questions from the user's logged data only.
+// Built-in coach (no AI service): answers a wide range of fitness and food
+// questions using curated advice plus the user's own logged data.
 import type { AppData, ISODate, Profile, WeeklyStats } from "./types";
 import { addDays, formatDay } from "./dates";
 import { completedSessions, currentWeight, dailyTotals, weightTrendPerWeek } from "./stats";
 import { nextWorkoutPlan } from "./coachContext";
 import { BUILTIN_FOODS } from "./foodDb";
 import { round } from "./format";
+import { simpleGoal } from "./calc";
+import { FORM_TIPS, RECIPES, SUPPLEMENT_INFO, type Recipe } from "./coachKnowledge";
 
 export type Pace = "on_track" | "too_slow" | "too_fast" | "wrong_way";
 
@@ -33,19 +35,73 @@ function paceAdvice(pace: Pace, planned: number, actual: number, avgCalories: nu
   return cutting ? "If you're on target and the scale isn't moving, lower your calories by about 150-200 kcal for the next 2 weeks or add some daily steps." : "If you're on target and still not gaining, raise your calories by about 150-200 kcal for the next 2 weeks.";
 }
 
-type Intent = "calories" | "protein" | "eat" | "rate" | "workout" | "plateau" | "week" | "routine" | "unknown";
+type Intent =
+  | "calories" | "protein" | "eat" | "rate" | "workout" | "plateau" | "week" | "routine"
+  | "recipe" | "snack" | "sleep" | "recovery" | "motivation" | "cardio" | "supplement" | "water" | "alcohol"
+  | "eatingOut" | "cheat" | "budget" | "mealPrep" | "form" | "warmup" | "missed" | "pain" | "appetite" | "hunger"
+  | "fluctuation" | "targets" | "fatLoss" | "greeting" | "thanks" | "unknown";
+
+// Checked in order: more specific topics first.
+const RULES: [Intent, RegExp][] = [
+  ["pain", /\b(pain|hurts?|injur|sprain|strain|pulled|tweak|sharp|doctor|physio)/],
+  ["thanks", /^(thanks|thank you|thx|cheers|ty)\b/],
+  ["greeting", /^(hi|hey|hello|yo|sup|g'?day|good (morning|afternoon|evening))\b[!. ]*$/],
+  ["supplement", /(creatine|protein powder|whey|mass gainer|gainer|pre[- ]?workout|fish oil|omega|vitamin d|bcaa|supplement)/],
+  ["form", /(form|technique|how (do|to) (i )?(do|perform)|cues?)\b.*|(bench|squat|deadlift|shoulder press|overhead press|ohp|row|pull[- ]?up|push[- ]?up).*(form|technique|properly|right|correct)/],
+  ["warmup", /(warm[- ]?up|warming up|before (i )?lift)/],
+  ["recipe", /(recipe|cook|make for (dinner|lunch|breakfast)|dinner idea|lunch idea|breakfast idea|meal idea|another one|something else|another)/],
+  ["mealPrep", /(meal ?prep|prep (my )?meals|batch cook)/],
+  ["budget", /(cheap|budget|afford|money|broke|student)/],
+  ["eatingOut", /(eating out|restaurant|takeaway|take ?out|fast food|mcdonald|kfc|subway|uber ?eats|maccas)/],
+  ["alcohol", /(alcohol|beer|drink(ing)? (alcohol|beer)|wine|party|drunk)/],
+  ["cheat", /(cheat (meal|day)|binge|overate|ate too much|junk food|pizza last night|blew my diet)/],
+  ["appetite", /(can'?t eat|not hungry|no appetite|full all the time|struggle to eat|too full|hard to eat)/],
+  ["hunger", /(always hungry|so hungry|starving|cravings?|keep snacking)/],
+  ["sleep", /(sleep|tired|insomnia|bed ?time|rest well)/],
+  ["recovery", /(sore|soreness|doms|recover|rest day|deload|overtrain)/],
+  ["motivation", /(motivat|lazy|give up|can'?t be bothered|don'?t feel like|discipline|consisten)/],
+  ["missed", /(missed|skipped|skip|sick|ill|holiday|travel)/],
+  ["cardio", /(cardio|running|run |walk|steps|hiit|bike|swim)/],
+  ["water", /(water|hydrat|drink enough)/],
+  ["fluctuation", /(weight (went|jumped|is) up|fluctuat|heavier this morning|water weight|bloat)/],
+  ["fatLoss", /(lose fat|belly fat|abs|six pack|tone|toned|body ?fat|lean out)/],
+  ["plateau", /(stopped|stall|plateau|not gaining|not losing|isn'?t (going up|going down|increasing|dropping)|stuck)/],
+  ["rate", /(fast enough|rate|gaining.*(fast|slow|enough)|losing.*(fast|slow|enough)|on track|progress)/],
+  ["workout", /(next workout|train today|workout today|what should i (train|lift)|today'?s workout)/],
+  ["eat", /(meal plan|diet plan|what (should|can) i eat(?!.*protein))/],
+  ["routine", /(improve|routine|program|split|plan)/],
+  ["week", /(this week|change|adjust)/],
+  ["targets", /(why .*(calories|protein|target)|how (much|many) (protein|calories)(?!.*(left|remaining))|explain my (target|calories))/],
+  ["snack", /(snack|between meals|something small)/],
+  ["protein", /protein/],
+  ["calories", /(calorie|kcal|left|remaining)/],
+  ["eat", /(eat|meal|food|hungry|dinner|lunch|breakfast)/],
+];
 
 export function detectIntent(q: string): Intent {
-  const s = q.toLowerCase();
-  if (/(stopped|stall|plateau|not gaining|isn'?t (going up|increasing)|stuck)/.test(s)) return "plateau";
-  if (/(fast enough|rate|gaining.*(fast|slow|enough)|on track)/.test(s)) return "rate";
-  if (/(next workout|train today|workout today|what should i (train|lift))/.test(s)) return "workout";
-  if (/(improve|routine|program|split)/.test(s)) return "routine";
-  if (/(this week|change|adjust)/.test(s)) return "week";
-  if (/protein/.test(s)) return "protein";
-  if (/(calorie|kcal|left|remaining)/.test(s)) return "calories";
-  if (/(eat|meal|food|hungry|snack)/.test(s)) return "eat";
+  const s = q.toLowerCase().trim();
+  for (const [intent, re] of RULES) if (re.test(s)) return intent;
   return "unknown";
+}
+
+const pick = <T,>(arr: T[], seed: number) => arr[Math.abs(seed) % arr.length];
+
+function recipesFor(profile: Profile, meal?: Recipe["meal"]): Recipe[] {
+  const prefs = profile.dietaryPreferences.map((p) => p.toLowerCase());
+  const g = simpleGoal(profile.goal);
+  return RECIPES.filter((r) => (!meal || r.meal === meal) && (!prefs.includes("vegan") || r.vegan) && (!prefs.includes("vegetarian") || r.vegetarian))
+    .sort((a, b) => (g === "cut" ? b.protein / b.kcal - a.protein / a.kcal : g === "bulk" ? b.kcal - a.kcal : 0));
+}
+
+function mealOfDay(hour: number): Recipe["meal"] {
+  if (hour < 10) return "breakfast";
+  if (hour < 14) return "lunch";
+  if (hour < 16) return "snack";
+  return "dinner";
+}
+
+function formatRecipe(r: Recipe): string {
+  return `**${r.name}** (about ${r.kcal} kcal, ${r.protein} g protein)\n${r.ingredients.map((i) => `- ${i}`).join("\n")}\n\n${r.steps}`;
 }
 
 const vegetarianSafe = (name: string) => !/(chicken|beef|salmon|tuna|pork|turkey|burger|pie|bolognese|burrito|sushi)/i.test(name);
@@ -63,12 +119,21 @@ export function suggestFoods(profile: Profile, needCalories: number, needProtein
   return scored.slice(0, n).map((x) => x.f);
 }
 
-export function basicCoachReply(question: string, data: AppData, profile: Profile, date: ISODate): string {
+export function basicCoachReply(question: string, data: AppData, profile: Profile, date: ISODate, history: string[] = [], hour = new Date().getHours()): string {
   const t = profile.targets;
   const totals = dailyTotals(data.foodEntries, date);
   const calLeft = Math.round(t.calories - totals.calories);
   const proLeft = Math.round(t.protein - totals.protein);
-  const intent = detectIntent(question);
+  let intent = detectIntent(question);
+  const goal = simpleGoal(profile.goal);
+  // "another one" / "more" continues the previous topic.
+  const followUp = /^(another|more|again|next|something else|another one|other)\b/i.test(question.trim());
+  if (followUp && history.length) {
+    const prev = [...history].reverse().map(detectIntent).find((i) => i !== "unknown" && i !== "recipe");
+    if (prev === "snack") intent = "snack";
+    else intent = "recipe";
+  }
+  const seed = history.length + question.length;
   const weight = currentWeight(data.bodyEntries, profile);
   const trend = weightTrendPerWeek(data.bodyEntries, addDays(date, -27), date);
   const foodsLine = (cal: number, pro: number) =>
@@ -124,8 +189,88 @@ export function basicCoachReply(question: string, data: AppData, profile: Profil
       tips.push("Aim to add a rep or a little weight on your main lifts each week, and keep 1-3 reps in reserve on most sets.");
       return tips.join("\n\n");
     }
+    case "recipe": {
+      const meals = ["breakfast", "lunch", "dinner", "snack"] as const;
+      const findMeal = (text: string) => meals.find((m) => text.toLowerCase().includes(m));
+      // A follow-up keeps the meal from the last recipe request.
+      const mealWord = findMeal(question) ?? (followUp ? [...history].reverse().map(findMeal).find(Boolean) : undefined);
+      const list = recipesFor(profile, mealWord ?? mealOfDay(hour));
+      const pool = list.length ? list : recipesFor(profile);
+      const asked = history.filter((h) => ["recipe"].includes(detectIntent(h)) || /^(another|more|something else)/i.test(h)).length;
+      const r = pool[asked % pool.length];
+      const fit = calLeft > 0 ? `\n\nYou have ${calLeft} kcal and ${Math.max(proLeft, 0)} g protein left today, so this ${r.kcal <= calLeft ? "fits" : "would take you a bit over. Use a smaller portion"}.` : "";
+      return `Try this:\n\n${formatRecipe(r)}${fit}\n\nSay "another one" for a different idea.`;
+    }
+    case "snack": {
+      const pool = recipesFor(profile, "snack");
+      const asked = history.filter((h) => detectIntent(h) === "snack").length;
+      const r = pool[asked % pool.length];
+      return goal === "cut"
+        ? `A filling, high-protein snack:\n\n${formatRecipe(r)}\n\nOther quick options: a protein yoghurt, a tin of tuna on rice cakes, or an apple with a protein shake.`
+        : `${formatRecipe(r)}\n\nOther easy calorie boosters: a handful of nuts (about 180 kcal), a banana with peanut butter, or a glass of full cream milk.`;
+    }
+    case "mealPrep":
+      return `Meal prep in about an hour:\n- Cook 1 kg of chicken (or tofu/lentils) with 2-3 different seasonings so it doesn't get boring.\n- Cook a big pot of rice or roast a tray of potatoes.\n- Roast or steam 2-3 trays of vegetables.\n- Portion into 4-5 containers. They keep about 3-4 days in the fridge, or freeze some.\n\nGood batch recipes: ${recipesFor(profile, "dinner").slice(0, 2).map((r) => r.name).join(", ")}.`;
+    case "budget":
+      return `Cheap foods that are great for ${goal === "cut" ? "cutting" : goal === "bulk" ? "bulking" : "staying fit"}:\n- Eggs, canned tuna, chicken thighs, mince on special\n- Oats, rice, pasta, potatoes, bread\n- Frozen vegetables and bananas\n- Milk, Greek yoghurt, cottage cheese\n- Lentils, chickpeas and beans (very cheap protein)\n\nBuying in bulk and meal prepping saves the most money.`;
+    case "eatingOut":
+      return goal === "cut"
+        ? "Eating out on a cut:\n- Pick a grilled protein (chicken, steak, fish) with salad or veg.\n- Ask for sauces on the side; skip the fries or share them.\n- Burgers: single patty, no mayo. Subway: a 6-inch with double meat and salad.\n- Log your best guess afterwards. A rough estimate beats nothing."
+        : "Eating out on a bulk is easy:\n- Burgers, burritos and pasta dishes are calorie-dense. Add extra protein where you can.\n- Pair it with a milkshake or a side if you're short on calories.\n- Log your best guess afterwards so the day still counts.";
+    case "alcohol":
+      return `Alcohol is about 7 kcal per gram with no nutrition. A beer is about 150 kcal, a glass of wine about 120 kcal and a mixer drink about 200 kcal. It also slows recovery and muscle building, especially in big amounts.\n\nIf you drink: keep it to a few, eat a proper protein meal first, drink water between drinks, and log it.${goal === "cut" ? " On a cut, the calories add up fast." : ""}`;
+    case "cheat":
+      return "One big day won't undo your progress. A single day of overeating mostly shows up as water weight for a few days.\n\nJust go back to normal at your next meal: don't skip meals or starve yourself to make up for it. Log it honestly so your averages stay real, and move on.";
+    case "appetite":
+      return `Struggling to eat enough is really common on a bulk. Try:\n- Drink some calories: the mass-gain smoothie (milk, oats, banana, peanut butter, protein) is about 750 kcal.\n- Add calorie-dense extras: olive oil on rice, peanut butter, cheese, nuts, dried fruit.\n- Eat more often: 4-5 smaller meals instead of 3 big ones.\n- Don't fill up on water or salad right before meals.\n\nYou still need about ${Math.max(calLeft, 0)} kcal today.`;
+    case "hunger":
+      return goal === "cut"
+        ? "Feeling hungry on a cut is normal. To stay fuller:\n- Get protein in every meal (you're aiming for " + t.protein + " g a day).\n- Fill half your plate with vegetables.\n- Choose high-volume foods: potatoes, oats, berries, soups, popcorn.\n- Drink water and get enough sleep. Poor sleep makes you hungrier.\n- Diet drinks and sugar-free gum can help with cravings."
+        : `If you're hungry, eat! You have ${Math.max(calLeft, 0)} kcal left today. Protein-rich options keep you full longest.`;
+    case "sleep":
+      return "Sleep is when you recover and build muscle. Aim for 7-9 hours.\n- Keep a regular bedtime and wake time, even on weekends.\n- No caffeine (including pre-workout) within 6-8 hours of bed.\n- Dark, cool room; put your phone away 30 minutes before bed.\n- A big late meal can disrupt sleep for some people. A small protein snack is fine.";
+    case "recovery":
+      return "Soreness is normal after new or harder training and usually fades in 2-3 days.\n- Light movement (walking, easy cycling) helps more than total rest.\n- Sleep, protein and enough food are the biggest recovery tools.\n- You can train a sore muscle lightly, but if you're very sore, train something else that day.\n- Every 6-10 weeks of hard training, an easier deload week helps you come back stronger.";
+    case "motivation":
+      return `Everyone has low-motivation days. ${pick(["You don't need motivation, you need a plan you follow even when you don't feel like it.", "Showing up for a short workout beats skipping. Tell yourself you'll do just 15 minutes; you'll usually do more.", "Progress is built on boring, consistent weeks, not perfect ones."], seed)}\n\n${data.workoutSessions.filter((s) => s.finishedAt).length ? `You've already completed ${data.workoutSessions.filter((s) => s.finishedAt).length} workouts in BULKUP. Keep the streak going.` : "Start small: log today's food and do one workout this week."}`;
+    case "missed":
+      return "Missing a session or a few days isn't a problem. Just pick up where you left off with your next scheduled workout. Don't try to cram missed sessions in.\n\nIf you've been sick, start back a little lighter for a session or two. Strength comes back quickly.";
+    case "cardio":
+      return goal === "cut"
+        ? "Cardio helps a cut by burning extra calories, but diet does most of the work.\n- Easiest win: walk more. 8,000-10,000 steps a day adds up.\n- 2-3 sessions of 20-30 minutes (bike, incline walk, rower) on top of lifting is plenty.\n- Keep lifting heavy so you keep your muscle."
+        : goal === "bulk"
+          ? "A little cardio is great for heart health and won't hurt your gains.\n- 2-3 sessions of 20 minutes, or regular walking, is plenty.\n- Just eat a bit more to cover what you burn."
+          : "For general fitness, aim for about 150 minutes of moderate cardio a week (brisk walking counts), plus your lifting.";
+    case "water":
+      return `Your water target is ${t.waterMl} ml a day. You've logged ${data.waterLogs.filter((w) => w.date === date).reduce((a, w) => a + w.ml, 0)} ml today.\n\nKeep a bottle with you, drink a glass with each meal, and add more on training days or when it's hot. Pale yellow urine is a good sign you're hydrated.`;
+    case "fluctuation":
+      return "Daily weight jumps of 0.5-2 kg are normal. They come from water, salt, carbs, food in your gut and hormones, not fat.\n\nWeigh in the morning after the toilet, before eating, and look at the weekly average on the Progress page instead of single days.";
+    case "fatLoss":
+      return `You can't spot-reduce fat from one area. Abs show when overall body fat gets low enough.\n- That takes a calorie deficit (a Cut goal), high protein and consistent lifting.\n- Ab exercises build the muscle underneath but don't burn the fat on top.\n${goal !== "cut" ? "\nIf that's your main aim, switch your goal to Cut under Me > Edit." : `\nYou're already cutting with a target of ${t.calories} kcal. Stay consistent.`}`;
+    case "targets":
+      return `Your targets come from your age, height, weight, activity and goal:\n- **${t.calories} kcal/day**: your estimated maintenance ${goal === "cut" ? "minus a deficit to lose fat" : goal === "bulk" ? "plus a surplus to build muscle" : "to stay the same"}.\n- **${t.protein} g protein**: about ${round(t.protein / weight, 1)} g per kg of body weight, which supports muscle${goal === "cut" ? " while you lose fat" : ""}.\n- **${t.weeklyGainKg > 0 ? "+" : ""}${t.weeklyGainKg} kg/week**: a sustainable rate.\n\nThese are estimates. If your weight isn't moving as planned after 2-3 weeks, adjust calories by 150-200 under Me > Goals & targets.`;
+    case "supplement": {
+      const s2 = question.toLowerCase();
+      const key = s2.includes("creatine") ? "creatine" : /protein|whey/.test(s2) ? "protein" : /gainer/.test(s2) ? "gainer" : /pre[- ]?workout/.test(s2) ? "pre-workout" : /fish|omega/.test(s2) ? "fish oil" : /vitamin d/.test(s2) ? "vitamin d" : /bcaa/.test(s2) ? "bcaa" : null;
+      if (key) return SUPPLEMENT_INFO[key];
+      return `Supplements are optional; food, training and sleep matter far more. The ones worth considering:\n- ${SUPPLEMENT_INFO.creatine}\n- ${SUPPLEMENT_INFO.protein}\n\nMost others (BCAAs, fat burners, testosterone boosters) aren't worth the money.`;
+    }
+    case "form": {
+      const s2 = question.toLowerCase();
+      const key = Object.keys(FORM_TIPS).find((k) => s2.includes(k) || (k === "shoulder press" && /overhead press|ohp/.test(s2)) || (k === "pull-up" && /pull ?up|chin/.test(s2)) || (k === "push-up" && /push ?up/.test(s2)));
+      if (key) return `**${key[0].toUpperCase() + key.slice(1)} tips:**\n${FORM_TIPS[key].map((x) => `- ${x}`).join("\n")}\n\nFilm a set from the side to check yourself. If anything hurts (not just effort), stop and get it checked.`;
+      return `I have technique tips for: ${Object.keys(FORM_TIPS).join(", ")}. Ask something like "squat form tips".`;
+    }
+    case "warmup":
+      return "A quick warm-up (5-10 minutes):\n1. 3-5 minutes of light cardio to get warm.\n2. A few dynamic moves: leg swings, arm circles, bodyweight squats.\n3. For your first lift, do 2-3 lighter sets building up to your working weight (e.g. empty bar x10, 50% x5, 75% x3).";
+    case "pain":
+      return "I'm not able to diagnose pain or injuries. If something hurts sharply, is swollen, or doesn't improve in a few days, please see a doctor or physio.\n\nIn the meantime, avoid movements that cause pain, keep training the parts that feel fine, and don't push through sharp pain.";
+    case "greeting":
+      return `Hey ${profile.name}! You've got ${Math.max(calLeft, 0)} kcal and ${Math.max(proLeft, 0)} g protein left today. Ask me about meals, recipes, your workouts, progress, sleep or anything else fitness-related.`;
+    case "thanks":
+      return pick(["Anytime! Keep it up.", "No worries. You've got this.", "Happy to help. Stay consistent!"], seed);
     default:
-      return `Here's where you stand today: ${Math.round(totals.calories)}/${t.calories} kcal, ${Math.round(totals.protein)}/${t.protein} g protein, current weight ${weight} kg (target ${profile.targetWeightKg} kg).\n\nThe basic coach can answer questions like "How many calories do I have left?", "What should I eat to reach my protein target?", "Am I on track?" or "What should my next workout be?".`;
+      return `Here's where you stand today: ${Math.round(totals.calories)}/${t.calories} kcal, ${Math.round(totals.protein)}/${t.protein} g protein, current weight ${weight} kg (target ${profile.targetWeightKg} kg).\n\nI can help with things like:\n- "Give me a dinner recipe" or "high-protein snack"\n- "Am I on track?" or "Why has my weight stopped changing?"\n- "What should my next workout be?" or "Squat form tips"\n- "Is creatine worth it?", "How do I sleep better?", "Eating out tips"`;
   }
 }
 
