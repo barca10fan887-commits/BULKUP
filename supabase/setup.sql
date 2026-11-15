@@ -50,6 +50,7 @@ create table if not exists public.custom_foods (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists custom_foods_user on public.custom_foods (user_id);
 
 create table if not exists public.favourite_meals (
   id uuid primary key,
@@ -60,6 +61,7 @@ create table if not exists public.favourite_meals (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists favourite_meals_user on public.favourite_meals (user_id);
 
 create table if not exists public.water_logs (
   id uuid primary key,
@@ -81,6 +83,7 @@ create table if not exists public.routines (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists routines_user on public.routines (user_id);
 
 create table if not exists public.workout_sessions (
   id uuid primary key,
@@ -124,6 +127,7 @@ create table if not exists public.progress_photos (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists progress_photos_user on public.progress_photos (user_id);
 
 create table if not exists public.supplements (
   id uuid primary key,
@@ -144,6 +148,7 @@ create table if not exists public.supplements (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists supplements_user on public.supplements (user_id);
 
 create table if not exists public.supplement_logs (
   id uuid primary key,
@@ -156,6 +161,7 @@ create table if not exists public.supplement_logs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists supplement_logs_user_date on public.supplement_logs (user_id, date);
 
 create table if not exists public.check_ins (
   id uuid primary key,
@@ -171,6 +177,7 @@ create table if not exists public.check_ins (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists check_ins_user on public.check_ins (user_id);
 
 create table if not exists public.coach_messages (
   id uuid primary key,
@@ -181,6 +188,7 @@ create table if not exists public.coach_messages (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists coach_messages_user on public.coach_messages (user_id);
 
 -- Row-level security: owner-only access on every table.
 do $$
@@ -195,16 +203,16 @@ begin
     execute format('drop policy if exists "owner insert" on public.%I', t);
     execute format('drop policy if exists "owner update" on public.%I', t);
     execute format('drop policy if exists "owner delete" on public.%I', t);
-    execute format('create policy "owner select" on public.%I for select using (auth.uid() = user_id)', t);
-    execute format('create policy "owner insert" on public.%I for insert with check (auth.uid() = user_id)', t);
-    execute format('create policy "owner update" on public.%I for update using (auth.uid() = user_id) with check (auth.uid() = user_id)', t);
-    execute format('create policy "owner delete" on public.%I for delete using (auth.uid() = user_id)', t);
+    execute format('create policy "owner select" on public.%I for select to authenticated using ((select auth.uid()) = user_id)', t);
+    execute format('create policy "owner insert" on public.%I for insert to authenticated with check ((select auth.uid()) = user_id)', t);
+    execute format('create policy "owner update" on public.%I for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', t);
+    execute format('create policy "owner delete" on public.%I for delete to authenticated using ((select auth.uid()) = user_id)', t);
   end loop;
 end $$;
 
 alter table public.profiles enable row level security;
 drop policy if exists "owner all" on public.profiles;
-create policy "owner all" on public.profiles for all using (auth.uid() = id) with check (auth.uid() = id);
+create policy "owner all" on public.profiles for all to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 -- Private storage bucket for progress photos. Objects live under <user_id>/...
 insert into storage.buckets (id, name, public)
@@ -215,14 +223,15 @@ drop policy if exists "photo owner read" on storage.objects;
 drop policy if exists "photo owner write" on storage.objects;
 drop policy if exists "photo owner update" on storage.objects;
 drop policy if exists "photo owner delete" on storage.objects;
-create policy "photo owner read" on storage.objects for select
-  using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
-create policy "photo owner write" on storage.objects for insert
-  with check (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
-create policy "photo owner update" on storage.objects for update
-  using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
-create policy "photo owner delete" on storage.objects for delete
-  using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "photo owner read" on storage.objects for select to authenticated
+  using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+create policy "photo owner write" on storage.objects for insert to authenticated
+  with check (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+create policy "photo owner update" on storage.objects for update to authenticated
+  using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+create policy "photo owner delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
 -- Lets a signed-in user permanently delete their own account from inside the app
 -- (required by the App Store). All their rows are removed by ON DELETE CASCADE.
 -- Their progress photos are removed by the app just before this is called.
@@ -230,7 +239,7 @@ create or replace function public.delete_own_account()
 returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = ''
 as $$
 begin
   if auth.uid() is null then

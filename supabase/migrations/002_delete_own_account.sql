@@ -5,7 +5,7 @@ create or replace function public.delete_own_account()
 returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = ''
 as $$
 begin
   if auth.uid() is null then

@@ -8,7 +8,7 @@ import { Segmented } from "@/components/ui/misc";
 type Mode = "signin" | "signup" | "forgot";
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,14 +30,30 @@ export default function AuthPage() {
       } else if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL } });
         if (error) throw error;
-        if (!data.session) setNotice("Check your inbox to confirm your email, then sign in.");
+        if (!data.session) {
+          setNotice("Almost done: open the email we just sent and tap the link to confirm, then sign in here.");
+          setMode("signin");
+        }
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + import.meta.env.BASE_URL });
         if (error) throw error;
         setNotice("If an account exists for that email, a reset link is on its way.");
       }
     } catch (err) {
-      setError((err as Error).message || "Something went wrong. Try again.");
+      const msg = (err as Error).message || "";
+      setError(
+        /invalid login credentials/i.test(msg)
+          ? "That email and password don't match. Try again or reset your password."
+          : /already registered/i.test(msg)
+            ? "There's already an account with that email. Sign in instead."
+            : /email not confirmed/i.test(msg)
+              ? "Please confirm your email first. Check your inbox for the link."
+              : /rate limit|too many/i.test(msg)
+                ? "Too many attempts. Wait a few minutes and try again."
+                : /fetch|network/i.test(msg)
+                  ? "Couldn't connect. Check your internet connection."
+                  : msg || "Something went wrong. Try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -50,9 +66,9 @@ export default function AuthPage() {
           <Logo />
         </div>
         <div className="rounded-3xl border border-ink-700 bg-ink-850 p-6 shadow-card">
-          <h1 className="font-display text-xl font-bold">{mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : "Reset your password"}</h1>
+          <h1 className="font-display text-xl font-bold">{mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your free account" : "Reset your password"}</h1>
           <p className="mt-1 text-sm text-mist-400">
-            {mode === "forgot" ? "We'll email you a link to set a new password." : "Your data is private and synced across your devices."}
+            {mode === "forgot" ? "We'll email you a link to set a new password." : mode === "signup" ? "Save your progress and use BULKUP on any device. Only you can see your data." : "Sign in to pick up where you left off."}
           </p>
           {mode !== "forgot" && (
             <Segmented
@@ -64,8 +80,8 @@ export default function AuthPage() {
                 setNotice(null);
               }}
               options={[
-                { value: "signin", label: "Sign in" },
                 { value: "signup", label: "Sign up" },
+                { value: "signin", label: "Sign in" },
               ]}
             />
           )}
