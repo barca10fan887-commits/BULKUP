@@ -238,7 +238,7 @@ function CompareView({ a, b, onClose }: { a: ProgressPhoto; b: ProgressPhoto; on
           <div className="relative min-h-0 w-full max-w-md flex-1 overflow-hidden rounded-2xl bg-ink-900">
             {urlB && <img src={urlB} alt="" className="absolute inset-0 h-full w-full object-contain" />}
             {urlA && <img src={urlA} alt="" className="absolute inset-0 h-full w-full object-contain" style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }} />}
-            <div className="absolute inset-y-0 w-0.5 bg-volt-400 shadow-[0_0_10px_#4d95ff]" style={{ left: `${split}%` }} />
+            <div className="absolute inset-y-0 w-0.5 bg-volt-400" style={{ left: `${split}%` }} />
             <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs">{formatDay(older.date, { day: "numeric", month: "short" })}</span>
             <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs">{formatDay(newer.date, { day: "numeric", month: "short" })}</span>
           </div>

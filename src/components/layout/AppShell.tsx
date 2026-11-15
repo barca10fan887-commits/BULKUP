@@ -77,7 +77,7 @@ function SideLink({ to, icon, label }: { to: string; icon: ReactNode; label: str
       className={({ isActive }) =>
         cn(
           "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-          isActive ? "bg-volt-500/12 text-volt-300 shadow-[inset_2px_0_0_0_#1f75ff]" : "text-mist-400 hover:bg-ink-800 hover:text-mist-100",
+          isActive ? "bg-volt-500/12 text-volt-300 " : "text-mist-400 hover:bg-ink-800 hover:text-mist-100",
         )
       }
     >
@@ -92,7 +92,7 @@ function BottomLink({ to, label, icon: Icon }: { to: string; label: string; icon
     <NavLink to={to} end={to === "/"} className={({ isActive }) => cn("relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition", isActive ? "text-volt-400" : "text-mist-500")}>
       {({ isActive }) => (
         <>
-          {isActive && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-volt-500 shadow-[0_0_12px_#1f75ff]" />}
+          {isActive && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-volt-500" />}
           <Icon className="h-[22px] w-[22px]" />
           {label}
         </>

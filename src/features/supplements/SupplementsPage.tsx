@@ -202,7 +202,7 @@ function History() {
                   const n = data.supplementLogs.filter((l) => l.supplementId === s.id && l.date === d).reduce((a, l) => a + l.servings, 0);
                   return (
                     <td key={d}>
-                      <div title={`${d}: ${n} serving(s)`} className={cn("mx-auto h-6 w-6 rounded-md", n >= s.dailyServings ? "bg-volt-500 shadow-[0_0_8px_rgba(31,117,255,.5)]" : n > 0 ? "bg-volt-500/40" : "bg-ink-700")} />
+                      <div title={`${d}: ${n} serving(s)`} className={cn("mx-auto h-6 w-6 rounded-md", n >= s.dailyServings ? "bg-volt-500" : n > 0 ? "bg-volt-500/40" : "bg-ink-700")} />
                     </td>
                   );
                 })}

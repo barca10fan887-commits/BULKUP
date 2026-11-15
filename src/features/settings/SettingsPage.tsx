@@ -179,6 +179,7 @@ function toDraft(p: Profile): ProfileDraft {
     targetWeightKg: p.targetWeightKg,
     experience: p.experience,
     trainingDays: p.trainingDays,
+    equipment: p.equipment ?? "gym",
     goal: p.goal,
     dailyActivity: p.dailyActivity,
     dietaryPreferences: p.dietaryPreferences,

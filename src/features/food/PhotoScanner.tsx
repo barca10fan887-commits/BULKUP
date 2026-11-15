@@ -11,7 +11,7 @@ import { Disclaimer, Pill } from "@/components/ui/misc";
 import { MEALS, MEAL_LABEL } from "./shared";
 import type { PickedFood } from "./ServingPicker";
 import { MacroPreview } from "./ServingPicker";
-import { Link } from "react-router-dom";
+import { AiConsent } from "@/components/AiConsent";
 
 interface EditableItem {
   key: number;
@@ -83,20 +83,14 @@ export function PhotoScanner({ meal: initialMeal, onAddMany, onManual }: { meal:
   );
   const update = (key: number, patch: Partial<EditableItem>) => setItems((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
 
-  if (aiAvailable === false || !profile.privacy.aiDataSharing) {
+  if (aiAvailable && !profile.privacy.aiDataSharing) return <AiConsent feature="scanner" />;
+  if (aiAvailable === false) {
     return (
       <div className="flex flex-col gap-3 rounded-2xl border border-ink-700 bg-ink-900 p-5">
         <div className="flex items-center gap-2 font-semibold">
           <AlertTriangle className="h-5 w-5 text-warn" /> Photo scanner unavailable
         </div>
-        {aiAvailable === false ? (
-          <p className="text-sm text-mist-400">The AI food scanner isn't set up on this server, so it can't analyse photos. Use search, barcode or manual entry instead. (The app owner can enable it by adding an AI API key to the server.)</p>
-        ) : (
-          <p className="text-sm text-mist-400">
-            The photo scanner sends your photo to an AI service for analysis. Turn on AI features in{" "}
-            <Link to="/settings#privacy" className="font-semibold text-volt-400">Settings &gt; Privacy</Link> to use it.
-          </p>
-        )}
+        <p className="text-sm text-mist-400">The photo scanner isn't switched on yet. Use search, barcode or manual entry for now.</p>
         <Button variant="secondary" onClick={onManual}>Add manually instead</Button>
       </div>
     );

@@ -14,7 +14,7 @@ body {
 }
 
 body {
-  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
   padding-top: env(safe-area-inset-top, 0px);
@@ -28,18 +28,6 @@ body::before {
   height: env(safe-area-inset-top, 0px);
   background: #050608;
   z-index: 45;
-}
-
-body::after {
-  /* Subtle blue glow behind the app */
-  content: "";
-  position: fixed;
-  inset: -20% -10% auto auto;
-  width: 60vmax;
-  height: 60vmax;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgba(31, 117, 255, 0.09), transparent);
-  z-index: 0;
 }
 
 #root {

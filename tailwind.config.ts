@@ -13,12 +13,13 @@ export default {
         bad: "#ff5c6c",
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
-        display: ['"Sora"', '"Plus Jakarta Sans"', "system-ui", "sans-serif"],
+        // The device's own font (SF Pro on iPhone): familiar and easy to read.
+        sans: ["-apple-system", "BlinkMacSystemFont", "system-ui", '"Segoe UI"', "Roboto", "Helvetica", "Arial", "sans-serif"],
+        display: ["-apple-system", "BlinkMacSystemFont", "system-ui", '"Segoe UI"', "Roboto", "Helvetica", "Arial", "sans-serif"],
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(31,117,255,.35), 0 8px 30px -8px rgba(31,117,255,.55)",
-        card: "0 1px 0 0 rgba(255,255,255,.03) inset, 0 10px 30px -15px rgba(0,0,0,.8)",
+        glow: "none",
+        card: "none",
       },
       keyframes: {
         rise: { from: { opacity: "0", transform: "translateY(8px)" }, to: { opacity: "1", transform: "none" } },

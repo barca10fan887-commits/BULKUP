@@ -4,7 +4,8 @@ import type { Profile, Targets } from "@/lib/types";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/auth/AuthProvider";
 import { computeTargets, simpleGoal, weeksToTarget } from "@/lib/calc";
-import { defaultPrivacy, defaultReminders, starterRoutines } from "@/lib/templates";
+import { defaultPrivacy, defaultReminders } from "@/lib/templates";
+import { generatePlan } from "@/lib/workoutPlan";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/layout/Logo";
 import { Disclaimer } from "@/components/ui/misc";
@@ -33,6 +34,7 @@ export default function Onboarding() {
     sex: "unspecified",
     experience: "beginner",
     trainingDays: 3,
+    equipment: "gym",
     goal: "bulk",
     dailyActivity: "light",
     dietaryPreferences: [],
@@ -87,6 +89,7 @@ export default function Onboarding() {
       targetWeightKg: target,
       experience: d.experience,
       trainingDays: d.trainingDays,
+      equipment: d.equipment,
       goal: simpleGoal(d.goal),
       dailyActivity: d.dailyActivity,
       dietaryPreferences: [],
@@ -102,7 +105,7 @@ export default function Onboarding() {
       updatedAt: now,
     };
     try {
-      addMany("routines", starterRoutines(d.trainingDays));
+      addMany("routines", generatePlan({ goal: simpleGoal(d.goal), experience: d.experience, days: d.trainingDays, equipment: d.equipment }));
       addMany("bodyEntries", [{ date: now.slice(0, 10), weightKg: d.startWeightKg!, custom: {}, note: "Starting weight" }]);
       await saveProfile(profile);
       toast.show({ message: `Welcome, ${profile.name}` });
@@ -126,7 +129,7 @@ export default function Onboarding() {
       </div>
       <div className="mt-4 flex gap-1.5" aria-hidden>
         {STEPS.map((x, i) => (
-          <span key={x.key} className={`h-1 flex-1 rounded-full transition-colors duration-500 ${i <= step ? "bg-volt-500 shadow-[0_0_10px_rgba(31,117,255,.6)]" : "bg-ink-700"}`} />
+          <span key={x.key} className={`h-1 flex-1 rounded-full transition-colors duration-500 ${i <= step ? "bg-volt-500" : "bg-ink-700"}`} />
         ))}
       </div>
 

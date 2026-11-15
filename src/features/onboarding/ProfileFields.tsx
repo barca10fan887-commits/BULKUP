@@ -6,6 +6,7 @@ import { Input, Textarea, Toggle, num } from "@/components/ui/Field";
 import { cn } from "@/components/ui/cn";
 import { DIET_OPTIONS } from "@/lib/templates";
 import { simpleGoal, type SimpleGoal } from "@/lib/calc";
+import type { Equipment } from "@/lib/workoutPlan";
 
 export interface ProfileDraft {
   name: string;
@@ -16,6 +17,7 @@ export interface ProfileDraft {
   targetWeightKg?: number;
   experience: Experience;
   trainingDays: number;
+  equipment: Equipment;
   goal: Goal;
   dailyActivity: DailyActivity;
   dietaryPreferences: string[];
@@ -97,8 +99,8 @@ export function ChoiceGrid<T extends string | number>({
   label,
 }: {
   value: T;
-  onChange(v: T): void;
-  options: { value: T; label: ReactNode; description?: ReactNode }[];
+  onChange: (v: NoInfer<T>) => void;
+  options: { value: NoInfer<T>; label: ReactNode; description?: ReactNode }[];
   columns?: number;
   label: string;
 }) {
@@ -183,6 +185,17 @@ export function TrainingFields({ d, set, showActivity = false }: { d: ProfileDra
           ))}
         </div>
       </fieldset>
+      <ChoiceGrid
+        label="Where do you train?"
+        value={d.equipment}
+        onChange={(equipment) => set({ equipment })}
+        columns={3}
+        options={[
+          { value: "gym", label: "Gym" },
+          { value: "dumbbells", label: "Home, dumbbells" },
+          { value: "bodyweight", label: "No equipment" },
+        ]}
+      />
       <ChoiceGrid
         label="Gym experience"
         value={d.experience}

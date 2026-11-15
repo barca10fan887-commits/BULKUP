@@ -91,7 +91,7 @@ export default function Dashboard() {
           {focus.slice(0, 3).map((f) => {
             const body = (
               <div className={cn("flex items-center gap-3 rounded-2xl border px-4 py-3", f.tone === "good" ? "border-good/20 bg-good/[.06]" : "border-ink-700 bg-ink-850")}>
-                {f.tone === "good" ? <CheckCircle2 className="h-4 w-4 shrink-0 text-good" /> : <span className={cn("h-2 w-2 shrink-0 rounded-full", f.tone === "action" ? "bg-volt-400 shadow-[0_0_8px_#4d95ff]" : "bg-mist-500")} />}
+                {f.tone === "good" ? <CheckCircle2 className="h-4 w-4 shrink-0 text-good" /> : <span className={cn("h-2 w-2 shrink-0 rounded-full", f.tone === "action" ? "bg-volt-400" : "bg-mist-500")} />}
                 <p className="min-w-0 flex-1 text-sm font-semibold">{f.title}</p>
                 {f.to && <ChevronRight className="h-4 w-4 shrink-0 text-mist-500" />}
               </div>

@@ -52,6 +52,8 @@ export interface Profile {
   targetWeightKg: number;
   experience: Experience;
   trainingDays: number;
+  /** Where they train; drives the generated workout plan. */
+  equipment?: "gym" | "dumbbells" | "bodyweight";
   goal: Goal;
   dailyActivity: DailyActivity;
   dietaryPreferences: string[];

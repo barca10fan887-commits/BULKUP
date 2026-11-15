@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronRight, Dumbbell, History, Pencil, Play, Plus, Trash2, Trophy } from "lucide-react";
+import { CalendarDays, ChevronRight, Dumbbell, History, Pencil, Play, Plus, Sparkles, Trash2, Trophy } from "lucide-react";
 import type { Routine, WorkoutSession } from "@/lib/types";
 import { useStore } from "@/data/store";
 import { today, weekday, WEEKDAYS_SHORT, friendlyDay, formatDay } from "@/lib/dates";
@@ -12,6 +12,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { MonthCalendar, Dot } from "@/components/MonthCalendar";
 import { cn } from "@/components/ui/cn";
 import { RoutineEditor } from "./RoutineEditor";
+import { PlanBuilder } from "./PlanBuilder";
 import { ActiveWorkout } from "./ActiveWorkout";
 import { uid } from "@/lib/id";
 
@@ -19,6 +20,7 @@ export default function WorkoutsPage() {
   const { data, add } = useStore();
   const [tab, setTab] = useState<"plan" | "history" | "records" | "calendar">("plan");
   const [editing, setEditing] = useState<{ open: boolean; routine: Routine | null }>({ open: false, routine: null });
+  const [builder, setBuilder] = useState(false);
   const active = data.workoutSessions.find((s) => !s.finishedAt);
 
   if (active) return <ActiveWorkout session={active} />;
@@ -46,11 +48,10 @@ export default function WorkoutsPage() {
   return (
     <div>
       <PageHeader
-        title="Workouts"
-        subtitle="Routines, sessions and personal records"
+        title="Train"
         action={
-          <Button onClick={() => setEditing({ open: true, routine: null })}>
-            <Plus className="h-4 w-4" /> Routine
+          <Button onClick={() => setBuilder(true)}>
+            <Sparkles className="h-4 w-4" /> New plan
           </Button>
         }
       />
@@ -65,16 +66,17 @@ export default function WorkoutsPage() {
           { value: "calendar", label: "Calendar" },
         ]}
       />
-      {tab === "plan" && <Plan onStart={start} onEdit={(r) => setEditing({ open: true, routine: r })} />}
+      {tab === "plan" && <Plan onStart={start} onEdit={(r) => setEditing({ open: true, routine: r })} onBuild={() => setBuilder(true)} onAdd={() => setEditing({ open: true, routine: null })} />}
       {tab === "history" && <HistoryList />}
       {tab === "records" && <Records />}
       {tab === "calendar" && <WorkoutCalendar />}
+      <PlanBuilder open={builder} onClose={() => setBuilder(false)} />
       <RoutineEditor open={editing.open} routine={editing.routine} onClose={() => setEditing({ open: false, routine: null })} />
     </div>
   );
 }
 
-function Plan({ onStart, onEdit }: { onStart(r: Routine | null): void; onEdit(r: Routine): void }) {
+function Plan({ onStart, onEdit, onBuild, onAdd }: { onStart(r: Routine | null): void; onEdit(r: Routine): void; onBuild(): void; onAdd(): void }) {
   const { data } = useStore();
   const t = today();
   const todays = isScheduled(data.routines, t);
@@ -104,7 +106,7 @@ function Plan({ onStart, onEdit }: { onStart(r: Routine | null): void; onEdit(r:
       )}
 
       {data.routines.length === 0 ? (
-        <EmptyState icon={<Dumbbell className="h-5 w-5" />} title="No routines yet" body="Create a routine with your exercises, sets and rest times, or start a quick workout and add exercises as you go." action={<Button onClick={() => onStart(null)}>Start quick workout</Button>} />
+        <EmptyState icon={<Dumbbell className="h-5 w-5" />} title="No plan yet" body="Get a weekly plan built for your goal, or start a workout and add exercises as you go." action={<Button onClick={onBuild}>Build my plan</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {[...todays, ...data.routines.filter((r) => !todays.includes(r))].map((r) => {
@@ -145,9 +147,14 @@ function Plan({ onStart, onEdit }: { onStart(r: Routine | null): void; onEdit(r:
         </div>
       )}
       {data.routines.length > 0 && (
-        <Button variant="ghost" className="self-center" onClick={() => onStart(null)}>
-          Start an empty workout
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button variant="ghost" onClick={onAdd}>
+            <Plus className="h-4 w-4" /> Add a day
+          </Button>
+          <Button variant="ghost" onClick={() => onStart(null)}>
+            Start an empty workout
+          </Button>
+        </div>
       )}
     </div>
   );

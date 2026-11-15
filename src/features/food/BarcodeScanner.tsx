@@ -180,8 +180,8 @@ function CameraView({ onDetected }: { onDetected(code: string): void }) {
     <div className="relative aspect-[4/3] max-w-full overflow-hidden rounded-2xl border border-ink-700 bg-black">
       <video ref={video} className="h-full w-full object-cover" playsInline muted aria-label="Camera preview" />
       <div className="pointer-events-none absolute inset-0 grid place-items-center">
-        <div className="relative h-[38%] w-[78%] rounded-2xl border-2 border-volt-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,.45)]">
-          <span className="absolute inset-x-4 top-1/2 h-0.5 animate-pulse bg-volt-400 shadow-[0_0_12px_#4d95ff]" />
+        <div className="relative h-[38%] w-[78%] rounded-2xl border-2 border-volt-400/90">
+          <span className="absolute inset-x-4 top-1/2 h-0.5 animate-pulse bg-volt-400" />
         </div>
       </div>
       {!active && (

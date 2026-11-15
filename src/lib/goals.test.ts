@@ -36,7 +36,7 @@ describe("cutting", () => {
 
 describe("goal weight validation", () => {
   const draft = (goal: ProfileDraft["goal"], target: number): ProfileDraft => ({
-    name: "A", age: 25, sex: "male", heightCm: 180, startWeightKg: 85, targetWeightKg: target, experience: "beginner", trainingDays: 3, goal, dailyActivity: "light",
+    name: "A", age: 25, sex: "male", heightCm: 180, startWeightKg: 85, targetWeightKg: target, experience: "beginner", trainingDays: 3, equipment: "gym", goal, dailyActivity: "light",
     dietaryPreferences: [], dietNotes: "", usesCreatine: false, usesProteinPowder: false, usesMassGainer: false,
   });
   it("accepts a lower goal weight when cutting", () => {

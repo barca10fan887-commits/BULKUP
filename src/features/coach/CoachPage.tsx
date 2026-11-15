@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { Bot, Info, Send, Square, Trash2, User } from "lucide-react";
 import type { ChatMessage, StatusResponse } from "@shared/api";
 import { useProfile, useStore } from "@/data/store";
@@ -11,16 +10,16 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader, Pill } from "@/components/ui/misc";
 import { RichText } from "@/components/RichText";
 import { cn } from "@/components/ui/cn";
+import { AiConsent } from "@/components/AiConsent";
 
 const SUGGESTIONS = [
   "What should I eat today?",
-  "How many calories do I have left?",
-  "What should I eat to reach my protein target?",
-  "Am I gaining weight fast enough?",
+  "Give me a high-protein dinner recipe",
+  "Am I on track for my goal?",
   "What should my next workout be?",
-  "How can I improve my routine?",
-  "Why has my weight stopped increasing?",
-  "What should I change this week?",
+  "How do I sleep better for recovery?",
+  "Is creatine worth it?",
+  "I have no motivation today",
 ];
 
 export default function CoachPage() {
@@ -29,7 +28,7 @@ export default function CoachPage() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; question: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const partial = useRef("");
@@ -48,19 +47,22 @@ export default function CoachPage() {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, streaming]);
 
-  async function ask(question: string) {
+  async function ask(question: string, retry = false) {
     const q = question.trim();
     if (!q || streaming !== null) return;
     setError(null);
     setInput("");
-    add("coachMessages", { role: "user", content: q });
+    if (!retry) add("coachMessages", { role: "user", content: q });
 
     if (mode === "basic") {
       add("coachMessages", { role: "assistant", content: basicCoachReply(q, data, profile, today()), source: "basic" });
       return;
     }
 
-    const history: ChatMessage[] = [...messages.slice(-10).map((m) => ({ role: m.role, content: m.content.slice(0, 8000) })), { role: "user", content: q }];
+    const prior = retry ? messages.slice(0, -1) : messages;
+    const history: ChatMessage[] = [...prior.filter((m) => m.source !== "basic").slice(-12).map((m) => ({ role: m.role, content: m.content.slice(0, 8000) })), { role: "user", content: q }];
+    // Merge consecutive same-role turns (e.g. after a failed reply) so the conversation alternates.
+    for (let i = history.length - 1; i > 0; i--) if (history[i].role === history[i - 1].role) history.splice(i - 1, 2, { role: history[i].role, content: `${history[i - 1].content}\n\n${history[i].content}` });
     // The API requires the conversation to start with a user turn.
     while (history.length && history[0].role !== "user") history.shift();
     const ctrl = new AbortController();
@@ -84,8 +86,7 @@ export default function CoachPage() {
         if (partial.current.trim()) add("coachMessages", { role: "assistant", content: `${partial.current.trim()}\n\n(stopped)`, source: "ai" });
         return;
       }
-      setError(e instanceof ApiError ? e.message : "The coach couldn't answer right now.");
-      add("coachMessages", { role: "assistant", content: basicCoachReply(q, data, profile, today()), source: "basic" });
+      setError({ message: e instanceof ApiError ? e.message : "The coach couldn't answer right now.", question: q });
     } finally {
       setStreaming(null);
       abort.current = null;
@@ -101,7 +102,7 @@ export default function CoachPage() {
     <div className="flex min-h-[calc(100dvh-180px)] flex-col">
       <PageHeader
         title="AI Coach"
-        subtitle={mode === "ai" ? "Personal advice from your logged data" : "Basic coach: answers from your logged data"}
+        subtitle={mode === "ai" ? "Ask me anything" : "Simple answers from your logged data"}
         action={
           messages.length > 0 &&
           (confirmClear ? (
@@ -126,19 +127,15 @@ export default function CoachPage() {
         }
       />
 
-      {status && mode === "basic" && (
-        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-warn/30 bg-warn/[.08] px-4 py-3 text-sm">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-          <div className="text-mist-300">
-            {!status.ai ? (
-              <>AI features are unavailable on this server, so you're using the basic coach. It answers common questions with simple rules from your logged data.</>
-            ) : (
-              <>
-                AI coaching is off because AI data sharing is disabled. The basic coach still answers common questions.{" "}
-                <Link to="/settings#privacy" className="font-semibold text-volt-400">Turn on AI features</Link>
-              </>
-            )}
-          </div>
+      {status?.ai && !profile.privacy.aiDataSharing && (
+        <div className="mb-4">
+          <AiConsent feature="coach" />
+        </div>
+      )}
+      {status && !status.ai && (
+        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-ink-700 bg-ink-850 px-4 py-3 text-sm">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-mist-400" />
+          <p className="text-mist-300">The AI coach isn't switched on yet, so you'll get simple answers based on your logged data.</p>
         </div>
       )}
 
@@ -148,14 +145,21 @@ export default function CoachPage() {
             <span className="grid h-14 w-14 place-items-center rounded-2xl bg-volt-500/15 text-volt-400 shadow-glow">
               <Bot className="h-7 w-7" />
             </span>
-            <p className="max-w-sm text-sm text-mist-400">Ask about your food, training or progress. Answers use what you've logged in BULKUP, never made-up numbers.</p>
+            <p className="max-w-sm text-sm text-mist-400">Ask about food, training, recovery, motivation, or anything else. I know your goal and what you've logged.</p>
           </div>
         )}
         {messages.map((m) => (
           <Bubble key={m.id} role={m.role} source={m.source} text={m.content} />
         ))}
         {streaming !== null && <Bubble role="assistant" source="ai" text={streaming || "…"} live />}
-        {error && <p className="text-center text-xs text-warn">{error} Showing a basic answer instead.</p>}
+        {error && (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-850 px-4 py-3 text-sm">
+            <span className="text-mist-300">{error.message}</span>
+            <Button size="sm" variant="secondary" onClick={() => ask(error.question, true)}>
+              Try again
+            </Button>
+          </div>
+        )}
         <div ref={bottom} />
       </div>
 

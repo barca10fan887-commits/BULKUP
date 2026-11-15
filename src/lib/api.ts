@@ -2,7 +2,8 @@
 import type { ChatMessage, FoodScanResult, StatusResponse } from "@shared/api";
 import { config } from "./config";
 
-const url = (path: string) => `${config.apiBaseUrl}${path}`;
+/** "/api/coach" -> same-origin server, or "<base>/coach" on a separate API host (e.g. Supabase Edge Function). */
+const url = (path: string) => (config.apiBaseUrl ? `${config.apiBaseUrl}/${path.replace(/^\/api\//, "")}` : path);
 
 let tokenProvider: () => Promise<string | null> = async () => null;
 export function setTokenProvider(fn: () => Promise<string | null>) {
@@ -36,6 +37,7 @@ async function headers(): Promise<Record<string, string>> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   const token = await tokenProvider();
   if (token) h.Authorization = `Bearer ${token}`;
+  if (config.supabaseAnonKey) h.apikey = config.supabaseAnonKey;
   const code = getAccessCode();
   if (code) h["X-Access-Code"] = code;
   return h;
