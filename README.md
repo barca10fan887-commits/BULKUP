@@ -82,9 +82,21 @@ How the AI endpoints are protected:
 
 Users must turn on **Settings > Privacy > AI features** before any of their data is sent to the AI service.
 
-## Deploy
+## Publish
 
-The server serves the built app and the API from one Node process, so any Node host works (Render, Railway, Fly.io, a VPS):
+### 1. Free web link on GitHub Pages (installs to your iPhone home screen)
+
+1. Push this project to a GitHub repository.
+2. In the repository, open **Settings > Pages** and set **Source** to **GitHub Actions**.
+3. Every push to `main` now runs `.github/workflows/pages.yml`, which tests, builds and publishes the app at `https://<username>.github.io/<repo>/`.
+
+This hosting is static, so the app runs in local mode: data is stored on the phone and the basic coach is used. To turn on AI and accounts, add step 2 and set the `VITE_*` repository variables.
+
+### 2. Server for the AI coach and photo scanner (optional)
+
+On render.com choose **New > Blueprint** and select the repository. `render.yaml` sets up the service. Fill in `ANTHROPIC_API_KEY`, and set `CORS_ORIGINS` to `https://<username>.github.io`. Then add the repository variable `VITE_API_BASE_URL=https://<your-service>.onrender.com` and push again. Copy the generated `BULKUP_ACCESS_CODE` from Render into the app under Settings > Privacy.
+
+The Node server can also serve the web app itself on any host:
 
 ```bash
 npm install && npm run build
@@ -94,40 +106,29 @@ npm install && npm run build
 npm start
 ```
 
-Set the environment variables from `.env.example` in your host's dashboard. The `VITE_*` variables must be set **before** `npm run build`, because they're compiled into the frontend. The site must be served over **HTTPS**, because the camera, barcode scanning, installing to the home screen and notifications all require it.
+The `VITE_*` variables must be set **before** building. The site must use **HTTPS**, because the camera, installing to the home screen and notifications all require it.
 
-## Install on iPhone
+### 3. App Store
 
-1. Open your deployed BULKUP address in **Safari**.
+See **[docs/APP_STORE.md](docs/APP_STORE.md)**. The native iOS project is in `ios/`, and `.github/workflows/ios-testflight.yml` builds and uploads it to TestFlight in the cloud, so no Mac is needed.
+
+## Install on iPhone (web version)
+
+1. Open the GitHub Pages link in **Safari**.
 2. Tap **Share**, then **Add to Home Screen**.
-3. Open BULKUP from the home screen icon. It runs full screen and works offline for logging.
-4. To get reminders, go to **Settings > Notifications** inside the installed app and turn them on. iOS needs version 16.4 or later, and the app must be opened from the home screen.
+3. Open BULKUP from the icon. It runs full screen and works offline.
 
 ## Known limits
 
-- **Reminders** are shown while the app is open or was used recently. Reminders that arrive while the app is fully closed need a push server (Web Push). The settings and reminder logic are ready for one.
+- **Reminders:** in the browser, reminders only appear while the app is open or was used recently. The App Store version schedules them with iOS, so they arrive even when the app is closed.
 - **Offline:** the app shell works offline. In cloud mode, changes made offline aren't queued yet. The store gives a clear "Couldn't save" message and rolls the change back.
 - **Food data:** Open Food Facts is a community database, so a product can be missing or wrong. When a barcode isn't found, the app offers manual entry and saves the product to My foods.
 - **Photo scanning** gives estimates for the user to review, not measurements.
 - Units are metric (kg, cm, ml).
 
-## Path to native iOS and Android apps
+## Native app
 
-The UI only talks to storage through the `Repository` interface (`src/data/repo.ts`), and device features are isolated in `src/lib` (camera via `BarcodeScanner`, `image.ts` and `notifications.ts`). The simplest route is to wrap the existing build with **Capacitor**:
-
-```bash
-npm i @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android
-```
-
-```bash
-npx cap init BULKUP com.yourname.bulkup --web-dir dist
-```
-
-```bash
-npx cap add ios
-```
-
-Then replace `notifications.ts` with `@capacitor/local-notifications` (true background reminders) and point API calls at your deployed server URL. Building for iOS needs a Mac with Xcode and an Apple Developer account.
+The iOS app wraps the same build with Capacitor. The UI talks to storage only through the `Repository` interface (`src/data/repo.ts`). In the native app, reminders use `@capacitor/local-notifications` (`src/lib/nativeReminders.ts`), so iOS delivers them even when the app is closed. Android can be added later with `npx cap add android`.
 
 ## Disclaimer
 

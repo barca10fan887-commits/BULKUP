@@ -8,7 +8,8 @@ import { computeTargets, inputsFromProfile } from "@/lib/calc";
 import { currentWeight } from "@/lib/stats";
 import { WEEKDAYS_SHORT } from "@/lib/dates";
 import { deleteCloudAccount, getAccessCode, getStatus, setAccessCode } from "@/lib/api";
-import { isIOS, isStandalone, notificationsSupported, permission, requestPermission, notify } from "@/lib/notifications";
+import { getPermission, isIOS, isStandalone, notificationsSupported, permission, requestPermission, notify } from "@/lib/notifications";
+import { isNative } from "@/lib/nativeReminders";
 import type { StatusResponse } from "@shared/api";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -212,6 +213,9 @@ function NotificationsSection() {
   const toast = useToast();
   const r = profile.reminders;
   const [perm, setPerm] = useState(permission());
+  useEffect(() => {
+    getPermission().then(setPerm);
+  }, []);
   const update = (patch: Partial<ReminderPrefs>) => saveProfile({ ...profile, reminders: { ...r, ...patch } });
   const iosNeedsInstall = isIOS() && !isStandalone();
 
@@ -221,7 +225,8 @@ function NotificationsSection() {
     setPerm(p);
     if (p === "granted") {
       await update({ enabled: true });
-      notify("Reminders are on", "BULKUP will remind you while the app is open or running in the background.", "test");
+      if (!isNative()) notify("Reminders are on", "BULKUP will remind you while the app is open or running in the background.", "test");
+      else toast.show({ message: "Reminders are on" });
     } else if (p === "denied") toast.show({ tone: "error", message: "Notifications are blocked. Allow them for BULKUP in your device or browser settings." });
   }
 
@@ -285,7 +290,9 @@ function NotificationsSection() {
                   </div>
                 )}
               </div>
-              <p className="pt-3 text-xs text-mist-500">Reminders are delivered while BULKUP is open or recently used. Fully background reminders need a push server, which is planned for the native app.</p>
+              <p className="pt-3 text-xs text-mist-500">
+                {isNative() ? "Reminders are scheduled on your iPhone and arrive even when BULKUP is closed." : "In the browser, reminders arrive while BULKUP is open or recently used. The App Store version delivers them even when the app is closed."}
+              </p>
             </>
           )}
         </div>
@@ -313,6 +320,9 @@ function PrivacySection() {
           checked={p.aiDataSharing}
           onChange={(v) => saveProfile({ ...profile, privacy: { ...p, aiDataSharing: v } })}
         />
+        <a href={`${import.meta.env.BASE_URL}privacy.html`} target="_blank" rel="noreferrer" className="py-3 text-sm font-semibold text-volt-400">
+          Read the privacy policy
+        </a>
         <Toggle label="Blur progress photo thumbnails" description="Thumbnails stay blurred until you tap or hover." checked={p.blurPhotos} onChange={(v) => saveProfile({ ...profile, privacy: { ...p, blurPhotos: v } })} />
         <div className="pt-3 text-sm text-mist-400">
           AI service status:{" "}
@@ -344,8 +354,18 @@ function DataSection() {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
 
-  function exportData() {
+  async function exportData() {
     const payload = { exportedAt: new Date().toISOString(), app: "BULKUP", version: 1, profile, ...data };
+    if (isNative()) {
+      // iOS apps can't trigger browser downloads; copy the export instead.
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+        toast.show({ message: "Export copied. Paste it into Notes or an email to keep a copy." });
+      } catch {
+        toast.show({ tone: "error", message: "Couldn't copy the export on this device." });
+      }
+      return;
+    }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

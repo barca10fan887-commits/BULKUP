@@ -1,5 +1,8 @@
 // Client for the BULKUP API server (AI coach, food photo scanner, account deletion).
 import type { ChatMessage, FoodScanResult, StatusResponse } from "@shared/api";
+import { config } from "./config";
+
+const url = (path: string) => `${config.apiBaseUrl}${path}`;
 
 let tokenProvider: () => Promise<string | null> = async () => null;
 export function setTokenProvider(fn: () => Promise<string | null>) {
@@ -41,7 +44,7 @@ async function headers(): Promise<Record<string, string>> {
 async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { method: body === undefined ? "GET" : "POST", headers: await headers(), body: body === undefined ? undefined : JSON.stringify(body), signal });
+    res = await fetch(url(path), { method: body === undefined ? "GET" : "POST", headers: await headers(), body: body === undefined ? undefined : JSON.stringify(body), signal });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
     throw new ApiError("Couldn't reach the BULKUP server. Check your connection.", 0, "network");
@@ -76,7 +79,7 @@ export function scanFood(imageBase64: string, mediaType: "image/jpeg", hint?: st
 export async function streamCoach(messages: ChatMessage[], context: unknown, mode: "chat" | "checkin", onText: (chunk: string) => void, signal?: AbortSignal): Promise<string> {
   let res: Response;
   try {
-    res = await fetch("/api/coach", { method: "POST", headers: await headers(), body: JSON.stringify({ messages, context, mode }), signal });
+    res = await fetch(url("/api/coach"), { method: "POST", headers: await headers(), body: JSON.stringify({ messages, context, mode }), signal });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
     throw new ApiError("Couldn't reach the BULKUP server. Check your connection.", 0, "network");

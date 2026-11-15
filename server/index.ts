@@ -13,6 +13,20 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "8mb" }));
 
+// CORS for the native iOS app (capacitor://localhost) and any extra origins you allow.
+const corsOrigins = ["capacitor://localhost", "ionic://localhost", ...(process.env.CORS_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/$/, ""))].filter(Boolean);
+app.use("/api", (req, res, next) => {
+  const origin = req.header("origin");
+  if (origin && corsOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Access-Code");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 // Basic security headers.
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");

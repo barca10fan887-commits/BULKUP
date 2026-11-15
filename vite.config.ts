@@ -5,8 +5,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// BASE_PATH lets the same build run at a sub-path, e.g. https://you.github.io/bulkup/
+const base = (process.env.BASE_PATH || "/").replace(/\/?$/, "/");
+// Native (Capacitor) builds don't use a service worker.
+const native = process.env.BUILD_TARGET === "native";
 
 export default defineConfig({
+  base,
   resolve: {
     alias: {
       "@": path.resolve(here, "src"),
@@ -20,6 +25,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      disable: native,
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png", "sw-notify.js"],
       manifest: {
@@ -30,18 +36,18 @@ export default defineConfig({
         background_color: "#050608",
         display: "standalone",
         orientation: "portrait",
-        start_url: "/",
-        scope: "/",
+        start_url: base,
+        scope: base,
         icons: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-          { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
-        navigateFallback: "/index.html",
-        importScripts: ["/sw-notify.js"],
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallback: `${base}index.html`,
+        importScripts: ["sw-notify.js"],
+        navigateFallbackDenylist: [/\/api\//, /\/privacy\.html$/],
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         runtimeCaching: [
           {

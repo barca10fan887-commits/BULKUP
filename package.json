@@ -12,9 +12,13 @@
     "preview": "npm run build && npm start",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "build:native": "tsc -b && BUILD_TARGET=native vite build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/ios": "^8.6.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
@@ -33,6 +37,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/local-notifications": "^8.3.1",
     "@supabase/supabase-js": "^2.46.1",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",

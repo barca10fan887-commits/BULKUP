@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { isNative, onNativeReminderTap, syncNativeReminders } from "@/lib/nativeReminders";
 import { useStore } from "@/data/store";
 import { notify, permission } from "@/lib/notifications";
 import { today, weekday, daysBetween } from "@/lib/dates";
@@ -33,8 +35,25 @@ export function ReminderScheduler() {
   const { profile, data } = useStore();
   const state = useRef({ profile, data });
   state.current = { profile, data };
+  const navigate = useNavigate();
+  const native = isNative();
+
+  // Native app: let iOS schedule the reminders so they fire when the app is closed.
+  const remindersKey = JSON.stringify([profile?.reminders, data.supplements.map((s) => [s.id, s.name, s.active, s.reminderTime, s.servingAmount, s.servingUnit])]);
+  useEffect(() => {
+    if (!native || !profile) return;
+    syncNativeReminders(profile, data.supplements).catch((e) => console.warn("Couldn't schedule reminders", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [native, remindersKey]);
+  useEffect(() => {
+    if (!native) return;
+    let off: (() => void) | undefined;
+    onNativeReminderTap(navigate).then((f) => (off = f));
+    return () => off?.();
+  }, [native, navigate]);
 
   useEffect(() => {
+    if (native) return;
     const tick = () => {
       const { profile: p, data: d } = state.current;
       if (!p?.reminders.enabled || permission() !== "granted") return;
@@ -91,7 +110,7 @@ export function ReminderScheduler() {
     tick();
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
-  }, []);
+  }, [native]);
 
   return null;
 }
